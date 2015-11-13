@@ -1,0 +1,71 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style type="text/css">
+#map {
+  width: 1000px;
+  height: 600px;
+}
+
+path {
+  fill: #ff0000;
+  fill-opacity: .2;
+  stroke: #fff;
+  stroke-width: 1.5px;
+}
+
+    </style>
+    <script type="text/javascript" src="lib/modestmaps.min.js"></script>
+    <script type="text/javascript" src="http://d3js.org/d3.v2.js"></script>
+  </head>
+<body>
+<div id="map"></div>
+<script type="text/javascript">
+  var MM=com.modestmaps;
+
+  var template = "http://a.tiles.mapbox.com/v3/lio.h497600p/{Z}/{X}/{Y}.png'";
+  var provider = new MM.TemplatedLayer(template, ['a', 'b', 'c', 'd']);
+  var map = new MM.Map("map", provider);
+  map.setCenterZoom(new MM.Location(37.8, -96.9), 4);
+
+  var svg = d3.select("#map").append("svg"),
+      g = svg.append("g");
+
+  svg.style("position", "absolute");
+
+  var project = function(x) {
+    var point = map.locationPoint(new MM.Location(x[1], x[0]));
+
+    return [point.x, point.y];
+  };
+
+  d3.json("us-states.json", function(collection) {
+    var bounds = d3.geo.bounds(collection),
+        path = d3.geo.path().projection(project);
+
+    var feature = g.selectAll("path")
+        .data(collection.features)
+      .enter().append("path");
+
+      var reset = function(m) {
+        var bottomLeft = project(bounds[0]),
+            topRight = project(bounds[1]);
+
+        svg .attr("width", topRight[0] - bottomLeft[0])
+            .attr("height", bottomLeft[1] - topRight[1])
+            .style("margin-left", bottomLeft[0] + "px")
+            .style("margin-top", topRight[1] + "px");
+
+        g   .attr("transform", "translate(" + -bottomLeft[0] + "," + -topRight[1] + ")");
+
+        feature.attr("d", path);
+      };
+
+
+      map.addCallback("drawn", reset);
+      reset();
+  });
+</script>
+
+</body>
+</html>

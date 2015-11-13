@@ -1,0 +1,532 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Chicago Crime Analysis - Tell Me What Do You See</title>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js" charset="utf-8"></script>
+	<script src='https://api.mapbox.com/mapbox.js/v2.2.2/mapbox.js'></script>
+	<link href='https://api.mapbox.com/mapbox.js/v2.2.2/mapbox.css' rel='stylesheet' />
+	<link href='lib/jquery-ui.css' rel='stylesheet' />
+	<link href='src/infloader.css' rel='stylesheet' />
+	<script src='lib/jquery.js' type='text/javascript'></script>
+	<script src='lib/jquery-ui.js' type='text/javascript'></script>
+	<script src='src/analysis.js' type='text/javascript'></script>
+	
+	<style>
+		body {font-family: helvetica; font-size: 10pt; font-weight: 100;}
+		#map { margin: 20px 10px; position:absolute; top:0; bottom:0; width:550px; height: 820px; }
+
+		
+		#div2 {margin: 0px 0px; position:absolute; top:0; bottom:0; width:500px; height: 800px;}
+		
+
+		.overlayGroup {
+			pointer-events: visible;
+		}
+
+		.transparentCircle 
+		{
+			fill: rgba(255, 126, 94, 0.6);
+			stroke: #cccccc;
+			r: 15px;
+			pointer-events: visible;
+		}
+
+		.rectangle 
+		{
+			fill: red;
+			stroke: none;
+		}
+
+		.cityPath {
+			stroke: #FF3300;
+			stroke-width: 3.5px;
+			fill: #eeeeee;
+			fill-opacity: 0.0;
+		}
+		.communityPath {
+
+			stroke: #777;
+			stroke-width: 1px;
+			fill:none ;
+		}
+		.communityPathFilled {
+
+			stroke: #FF3300;
+			stroke-width: 1px;
+			fill: #FF3300;
+			fill-opacity: 0.5;
+		}
+
+		svg {z-index: 2000;}
+		
+		.sectionLabel 
+		{
+			margin-bottom: 1px;
+			font-weight: 600;
+		}
+
+		.gridLine
+		{
+			stroke-opacity: 0.7;
+			stroke: blue;
+			stroke-width: .5px;
+		}
+
+		.heatmap {
+			cursor: default;
+		}
+
+		.strokedHeatmapCell {
+			stroke: black;
+			stroke-width: 1px;
+		}
+
+	</style>
+
+</head>
+
+<body>
+	<div id='map' style="border: solid 1px black"></div>
+	
+	<!-- user interface -->
+	<div id='uiPane' style="position: absolute; top: 20px; left: 1200px; background: #eee; width: 150px; height: 230px; border: solid 1px #cccccc; padding: 5px 10px">
+		<form>
+			<div class="sectionLabel">Map</div>
+			<input id="checkShowCommunities" type="checkbox" value="1" checked></input>show communities<br>
+			<input id="checkShowCity" type="checkbox" value="1" checked></input>show city boundaries<br>
+			map opacity</span>
+			<div id="sliderMapOpacity" style="margin-top: 5px; width: 100px; height: 10px"></div>
+
+			<br>
+			<div class="sectionLabel">Partition grid</div>
+			<input id="checkShowGrid" type="checkbox" value="1" ></input>show grid<br>
+			<input id="checkShowHeatmap" type="checkbox" value="1" checked></input>show heatmap<br>
+			
+			grid resolution
+			<div id="sliderGridResolution" style="margin-top: 5px; margin-bottom: 7px; width: 100px; height: 10px"></div>
+			grid overlap
+			<div id="sliderGridOverlap" style="margin-top: 5px; width: 100px; height: 10px"></div>
+		</form>
+	</div>
+
+	<div id="featurePane" style="position: absolute; top: 270px; left: 1200px; background: #f3f3f3; width: 150px; height: 230px; border: solid 1px #cccccc; padding: 5px 10px">
+		<div class="sectionLabel">Signal</div>
+		
+		<span id="labelYearlyRange">data range</span>
+		<div id="sliderYearlyRange" style="margin-top: 5px; margin-bottom: 7px; width: 100px; height: 10px"></div>
+		<br>
+		
+		<b>aggregate</b>
+		<form>
+			<input value="yearly" name="signalAggregate" id="radioWarpYearly" type="radio">yearly (day)<br>
+			<input value="monthly" name="signalAggregate" id="radioWarpMonthly" type="radio">monthly (6 hours)<br>
+			<input value="weekly" name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
+			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">daily (30 min)<br>
+			<input value="total" checked name="signalAggregate" id="radioWarpDaily" type="radio">total<br>
+
+			<input id="buttonRunAnalysis" type="button" value="run analysis" style="background: #FFBDBD;font-family: helvetica; font-size: 10pt; font-weight: 100">
+		</form>
+
+		<div style="width: 100px; height: 30px; margin-top: 10px; margin-bottom: 10px;"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
+	</div>
+	<!-- user interface elements -->
+
+	<!-- exploration pane -->
+	<div id="trajectoryPane" style="position: absolute; top: 20px; left: 580px; background: #fff; width: 590px; height: 480px; border: solid 1px #cccccc; padding: 5px 10px; visibility: true">
+		<div class="sectionLabel">Explore</div>
+	</div>
+
+	<!-- MDS pane -->
+	<svg id="svgMDS" style="position: absolute; top: 520px; left: 580px; width: 500px; height: 320px; border: solid 1px #cccccc"></svg>
+
+
+	<script type="text/javascript">
+		
+		// essential information
+		var theMap = null;			// map object
+		var svg = null;				// SVG overlay over the map
+		var mapPathGenerator;		// path generator to project from lat,long to pixel coordinates in the map
+		var mapPane = null;	
+		var geoNames = {};			// geo-referenced data attached to the SVG (so that we can translate and reproject them, when the map changes)
+		var geodata = [];
+
+		// variables controllable by the UI
+		var GRID_LINE_COUNT = 40;
+		var GRID_OVERLAP = 0;
+		var SHOW_GRID = false;
+		var SHOW_COMMUNITIES = false;
+		var SHOW_HEATMAP = true;
+		var SHOW_CITY = true;
+		var MAP_OPACITY = 1.0;
+		var YEAR_RANGE = [2013, 2014];
+
+		// analysis interface (which will connect to a nodejs back-end to run analyses on the database)
+		var gridAnalysis = null;
+
+		function initUI()
+		{
+			d3.select("#checkShowCommunities").on("click", function() {
+				var group = getGeoObject("communities").group;
+				group.attr("visibility", this.checked ? "visible" : "hidden");
+				SHOW_COMMUNITIES = this.checked;
+			}).node().checked = SHOW_COMMUNITIES;
+
+			d3.select("#checkShowCity").on("click", function() {
+				var group = getGeoObject("city").group;
+				group.attr("visibility", this.checked ? "visible" : "hidden");
+				SHOW_CITY = this.checked;
+			}).node().checked = SHOW_CITY;
+
+
+			d3.select("#checkShowGrid").on("click", function() {
+				d3.select("#gridGroup").attr("visibility", this.checked ? "visible" : "hidden");
+				SHOW_GRID = this.checked;
+			}).node().checked = SHOW_GRID;
+
+			d3.select("#checkShowHeatmap").on("click", function() {
+				d3.select("#heatmap").attr("visibility", this.checked ? "visible" : "hidden");
+				SHOW_HEATMAP = this.checked;
+			}).node().checked = SHOW_GRID;
+
+			// make a slider for map opacity
+			$("#sliderMapOpacity").slider({
+				range: false,
+				min: 0.0, max: 1.0,
+				value: MAP_OPACITY,
+				step: 0.05,
+				change: function( event, ui ) {
+					MAP_OPACITY = ui.value;
+					d3.select("#mapOpacityRectangle").style("fill-opacity", 1.0-MAP_OPACITY);
+				}
+			});
+
+			// make a slider for grid resolution
+			$("#sliderGridResolution").slider({
+				range: false,
+				min: 5, max: 130,
+				value: GRID_LINE_COUNT,
+				change: function( event, ui ) {
+					GRID_LINE_COUNT = ui.value;
+					projectGrid();
+				}
+			});
+
+			$("#sliderGridOverlap").slider({
+				range: false,
+				min: 0, max: .8, step: .01,
+				value: GRID_OVERLAP ,
+				change: function( event, ui ) {
+					GRID_OVERLAP = ui.value
+					projectGrid();
+				}
+			});
+
+			// yearly range
+			$("#sliderYearlyRange").slider({
+				range: true,
+				min: 2002, max: 2014, step: 1,
+				values: YEAR_RANGE,
+				change: function( event, ui ) {
+					$("#labelYearlyRange").html("data range: " + ui.values[0] + "-" + ui.values[1]);
+					YEAR_RANGE = ui.values;
+
+				}
+			});
+			$("#labelYearlyRange").html("data range: 2002-2014");
+
+
+			// run analysis
+			d3.select("#buttonRunAnalysis").on("click", function() 
+			{
+				// turn on load spinner
+				projectGrid();
+				d3.select("#loadSpinner").style("visibility", "visible");
+
+				// set type of aggregation
+				var signalAggregate = $('input[name="signalAggregate"]:checked').val();
+				gridAnalysis.setSignalAggregate(signalAggregate);
+
+				// range the slider
+				gridAnalysis.setRangeLimit(YEAR_RANGE);
+
+				// make sure the
+				gridAnalysis.sendRequest(function(jsonResponse) 
+				{
+					// turn off load spinner
+					d3.select("#loadSpinner").style("visibility", "hidden");
+
+					// load heatmap
+					gridAnalysis.makeHeatmap(jsonResponse.aggregate, jsonResponse.timeseries);
+					SHOW_HEATMAP = true;
+					d3.select("#checkShowHeatmap").node().checked = true;
+				})
+			});
+
+		}
+
+		function initializeMap()
+		{
+			L.mapbox.accessToken = 'pk.eyJ1IjoibGlvIiwiYSI6IlNaY2IzeUUifQ.qAjegKikOgTh4XJaPJ4fJw';
+			
+			theMap = L.mapbox.map('map', 'mapbox.emerald', {fadeAnimation: true, inertia: false, zoomAnimation: false})
+				.setView([ 41.840920397579936, -87.67433166503906], 11);
+		
+			// get map pane (this will be the overlay layer)
+			mapPane = d3.select("#map").select("div.leaflet-map-pane");
+
+			// registe revent listeners			
+			theMap.on("viewreset", function() { reprojectGeoData() });
+			theMap.on("move", function(e) 
+			{
+				translateGeoData();
+			});
+
+			// initialize grid analysis object
+			gridAnalysis = new GridAnalysis(theMap);
+		}
+
+		function makeSVG()
+		{
+			var mapDiv = d3.select("#map");
+			var width = +mapDiv.node().clientWidth;
+			var height = +mapDiv.node().clientHeight;
+
+			// now append an SVG layer on top of the map and see
+			// if everything still works
+			var newDiv = d3.select("#map").append("div")
+				.attr("id", "div2");
+
+			
+			svg = newDiv.append("svg")
+				.attr("id", "svgMap")
+				.attr("width", width)
+				.attr("height", height);
+			svg.append("rect")
+				.attr("id", "mapOpacityRectangle")
+				.attr("x", 0).attr("y", 0).attr("width", width).attr("height", height)
+				.style("fill", "white")
+				.style("stroke", "none")
+				.style("fill-opacity", 1.0-MAP_OPACITY);
+
+			group = svg.append("g")
+				.attr("id", "masterOverlay")
+				.attr("class", "overlayGroup");
+
+		}
+
+		function projectPoint(x, y) 
+		{
+			var point = theMap.latLngToContainerPoint({lat: y, lon: x});
+			this.stream.point(point.x, point.y);
+		} 
+
+		function projectGrid()
+		{
+			// remove any previous grid
+			svg.select("#gridGroup").remove();
+
+			// determine the size of cells in the grid
+			var div = d3.select("#svgMap");
+			var w = +div.attr("width");
+			var h = +div.attr("height");
+			
+			var cellSize = h / GRID_LINE_COUNT;
+			var gridRows = Math.ceil(h / cellSize);
+			var gridCols = Math.ceil(w / cellSize);
+
+			var rows = d3.range(1*cellSize, gridRows*cellSize, cellSize * (1.0-GRID_OVERLAP));
+			var cols = d3.range(1*cellSize, gridCols*cellSize, cellSize * (1.0-GRID_OVERLAP));
+
+			// get map div
+			var group = svg.append("g")
+				.attr('id', 'gridGroup')
+				.attr('visibility', SHOW_GRID ? 'visible' : 'hidden');
+			var rowGroup = group.append("g");
+			var colGroup = group.append("g");
+
+			rowGroup.selectAll("line").data(rows).enter().append("line")
+				.attr('class', 'gridLine')
+				.attr("x1", 0).attr("x2", w)
+				.attr("y1", function(d) { return d})
+				.attr("y2", function(d) { return d});
+
+			colGroup.selectAll("line").data(cols).enter().append("line")
+				.attr('class', 'gridLine')
+				.attr("y1", 0).attr("y2", h)
+				.attr("x1", function(d) { return d; })
+				.attr("x2", function(d) { return d; });
+
+			// constrcut grid for GridAnalysis
+			gridAnalysis.constructGrid(cellSize, cellSize, rows.length+1, cols.length+1, GRID_OVERLAP);
+		}
+
+		function projectCity(geoFile)
+		{
+			if (!geoFile) geoFile = "data/chi-boundaries.json";
+			d3.json(geoFile, function(err, mapData) 
+			{
+				if (err) {
+					return console.error(err);
+				}
+				else
+				{
+					var transform = d3.geo.transform({
+						point: projectPoint
+					});
+					
+					// make a path generator for the map
+					if (!mapPathGenerator) {
+						mapPathGenerator = d3.geo.path().projection(transform);
+					}
+
+    				var group = svg.append("g")
+    					.attr("visibility", SHOW_CITY ? "visible" : "hidden");
+
+					var selection = group.selectAll("path").data([mapData]).enter().append("path")
+						.attr('d', mapPathGenerator)
+						.attr('class', 'cityPath');
+
+					addGeoObject({
+						type: "features",
+						selection: selection,
+						group: group
+					}, "city");
+				}
+			});
+		}
+
+		function projectCommunities(geoFile)
+		{
+			totalProjected = 0;
+			if (!geoFile) geoFile = "data/chi-communities.json";
+			d3.json(geoFile, function(err, mapData) 
+			{
+				if (err)
+					return console.error(err);
+				else
+				{
+					var transform = d3.geo.transform({
+						point: projectPoint
+					});
+					
+					// make a path generator for the map
+					if (!mapPathGenerator) {
+						mapPathGenerator = d3.geo.path().projection(transform);
+					}
+
+    
+    				var group = d3.select("#masterOverlay").append("g")
+    					//.attr("class", "overlayGroup")
+    					.attr("visibility", SHOW_COMMUNITIES ? "visible" : "hidden");
+
+					var selection = group.selectAll("path").data(mapData.features).enter().append("path")
+						.attr('d', mapPathGenerator)
+						.attr('class', 'communityPath')
+						.on("mouseover", function() {
+							d3.select(this).attr('class', 'communityPathFilled')
+						})
+						.on("mouseout", function() {
+							d3.select(this).attr('class', 'communityPath')
+						});
+
+					addGeoObject({
+						type: "features",
+						selection: selection,
+						group: group
+					}, "communities");
+
+				}
+			});
+		}
+
+		function getMapOffset()
+		{
+			var matrix = mapPane.style("transform");
+			var str = matrix.toString();
+			var coords = str.substr(str.indexOf("(")+1);
+			coords = coords.substr(0, coords.length-1);
+			var tokens = coords.split(",");
+			return [+tokens[4], +tokens[5]];	
+		}
+
+		function getGeoObject(name) {
+			return geoNames[name];
+		}
+		function addGeoObject(geo, name)
+		{
+			geo.offset = getMapOffset();
+			geodata.push(geo);
+			if (name) geoNames[name] = geo;
+		}
+
+		function translateGeoData()
+		{
+			var newOffset = getMapOffset();
+			for (var i = 0; i < geodata.length; i++)
+			{
+				var g = geodata[i];
+				var offset = [-g.offset[0] + newOffset[0], -g.offset[1] + newOffset[1]];
+
+				if (g.type == "point")
+				{
+					g.geom
+						.attr("cx", offset[0])
+						.attr("cy", offset[1])
+				}
+				else if (g.type == "features" || g.type == "selfproject")
+				{
+					g.group.attr("transform", "translate(" + offset[0] + "," + offset[1] + ")");
+				}
+			}
+		}
+
+		function reprojectGeoData()
+		{
+			for (var i = 0; i < geodata.length; i++) 
+			{
+				var g = geodata[i];
+				if (g.type == "point") {
+					var point = theMap.latLngToContainerPoint({lat: g.lat, lon: g.lon});
+					g.geom
+						.attr("cx", point.x)
+						.attr("cy", point.y);
+				}
+				else if (g.type == "features") {
+					g.selection.attr("d", mapPathGenerator);
+					g.group.attr("transform", "");
+				}
+				else if (g.type == "selfproject") {
+					g.selection.attr("d", function(d) { return d.projectSelfPath();})
+					g.group.attr("transform", "");
+				}
+				g.offset = [0, 0];
+			}
+		}
+ 
+ 		function addGeoCircle(lat, lon)
+ 		{
+ 			var p = theMap.latLngToContainerPoint({lat: lat, lon: lon});
+
+ 			var circle = group.append("circle")
+ 				.attr("class", "transparentCircle")
+ 				.attr("cx", p.x)
+ 				.attr("cy", p.y)
+ 				.on("mouseover", function() { d3.select(this).style("stroke", "black").style("stroke-width", "3px")})
+				.on("mouseout", function() { d3.select(this).style("stroke", "").style("stroke-width", "")});
+
+
+ 			addGeoObject({ type: "point", lat: lat, lon: lon, geom: circle });
+ 		}
+
+
+		initializeMap();
+		makeSVG();
+		projectCommunities();
+		projectCity();
+		initUI();
+		projectGrid();
+
+	</script>
+
+</body>
+</html>
