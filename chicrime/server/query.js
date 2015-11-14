@@ -161,7 +161,7 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 	// create a dictionary of time series
 	var tsDictionary = new TimeSeriesDictionary(ALPHABET_SIZE, WORD_SIZE, WINDOW_SIZE);
 
-
+	// loop through all returned documentes
 	for (var i = 0, len = docs.length; i < len; i++) 
 	{
 		var doc = docs[i];
@@ -188,6 +188,7 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 
 	// count time-series aggregate (heatmap) and analyze the time-series 
 	var aggregate = [];
+	var tsIndex = [];
 	for (var i = 0, len = data.length; i < len; i++) 
 	{
 		if (!data[i]) continue;
@@ -209,13 +210,8 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 				if (timeseries.length > 1) 
 				{
 					// add this time series to the dictionary
-					var results = tsDictionary.addTimeSeries(timeseries);
-					/*
-					console.log("** Added time series: " + results.id);
-					results.strings.forEach(function(freq, str) {
-						console.log("\t" + str + ":\t\t\t" + freq);
-					});
-					*/
+					var ret = tsDictionary.addTimeSeries(timeseries);
+					tsIndex.push([i, j]);
 				}
 
 				for (var k=0, len3=timeseries.length; k < len3; k++) {
@@ -227,15 +223,16 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 		aggregate[i] = aggRow;
 	}
 
-	// set time series
-	setTimeout(function(ts)
-	{
-		console.log("** calculating similarity for: " + ts.getTimeSeriesCount() + " series...");
-		ts.calSimilarityMatrix();
-		console.log("** done.");
-	}, 1000, tsDictionary)
+	console.log("Calculating similarity for: " + tsDictionary.getTimeSeriesCount() + " series...");
+	var simMatrix = tsDictionary.calcSimilarityMatrix();
+	console.log("done");
 	
-	return { timeseries: data, aggregate: aggregate };
+	return {
+		timeseries: data, 
+		simMatrix: simMatrix,
+		tsIndex: tsIndex,
+		aggregate: aggregate
+	};
 }
 
 function connectToDB(callback) 

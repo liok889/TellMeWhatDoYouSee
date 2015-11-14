@@ -128,12 +128,19 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 };
 
 
-function GeoRect(_nValue, _timeseries, _tL, _bR) {
+function GeoRect(_nValue, _timeseries, cell, _tL, _bR) {
 	this.nValue = _nValue;
 	this.timeseries = _timeseries;
 	this.tL = _tL;
 	this.bR = _bR;
+	this.cell = cell;
 }
+
+GeoRect.prototype.getCell = function() {
+	return this.cell;
+}
+
+
 GeoRect.prototype.getValue = function() {
 	return this.nValue;
 }
@@ -195,6 +202,34 @@ function drawTimeseries(timeseries, group)
 		.attr("d", lineFunction(data)); */
 }
 
+
+GridAnalysis.prototype.drawMDS = function(svg, width, height)
+{
+	var mds = new MDS(svg);
+	var matrix = symmetrizeSimMatrix(this.analysisResults.simMatrix);
+	mds.plotMDS(matrix, this.analysisResults.tsIndex, 2, this);
+}
+
+GridAnalysis.prototype.highlightHeatmapCell = function(cell, highlight)
+{
+	if (Array.isArray(cell))
+	{
+		cell.forEach(function(co) 
+		{
+			var c = co.getCell();
+			d3.select("#heatmap_cell_" + c[0] + "_" + c[1])
+				.style("stroke", highlight ? "black" : "")
+				.style("stroke-width", highlight ? "2px" : "");
+		});	
+	}
+	else
+	{
+		d3.select("#heatmap_cell_" + cell[0] + "_" + cell[1])
+			.style("stroke", highlight ? "black" : "")
+			.style("stroke-width", highlight ? "2px" : "");
+	}
+}
+
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 {
 	var minValue = Number.MAX_VALUE;
@@ -228,6 +263,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				geoRects.push(new GeoRect(
 					count,
 					timeseries[i][j],
+					[i, j],
 					{ lat: geoCoord[0], lng: geoCoord[1] },
 					{ lat: geoCoord[2], lng: geoCoord[3] }
 				));
@@ -247,6 +283,10 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup) 
 	{
 		var selection = heatmapGroup.selectAll("path").data(geoRects).enter().append("path")
+			.attr("id", function(d) {
+				var cell = d.getCell();
+				return "heatmap_cell_" + cell[0] + "_" + cell[1]; 
+			})
 			.attr("d", function(d) 
 			{
 				return d.projectSelfPath();
@@ -294,5 +334,3 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	})(svg, _colorScale, _logScale, parentGroup, overlayGroup);
 
 }
-
-

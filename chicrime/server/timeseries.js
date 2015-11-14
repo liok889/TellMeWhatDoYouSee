@@ -65,7 +65,7 @@ TimeSeriesDictionary.prototype.addTimeSeries = function(data)
 }
 
 var WORK=0;
-TimeSeriesDictionary.prototype.calSimilarityMatrix = function()
+TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 {
 	// make a similarity matrix
 	var nn = this.timeSeriesCount;
