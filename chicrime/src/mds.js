@@ -109,6 +109,7 @@ MDS.prototype.classic = function(distances, dimensions)
 	console.log("calculating SVD...");
 	var ret = numeric.svd(M),
 	eigenValues = numeric.sqrt(ret.S);
+	console.log("OK");
 
 	return ret.U.map(function(row) {
 		return numeric.mul(row, eigenValues).splice(0, dimensions);
@@ -157,14 +158,18 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 			.attr("cx", function(d) { var x = xS(d.coordinate[0]); d.p[0] = x; return x; })
 			.attr("cy", function(d) { var y = yS(d.coordinate[1]); d.p[1] = y; return y; })
 			.attr("r", MDS_POINT_RADIUS)
-			.on("mouseover", function(d) {
-				grid.highlightHeatmapCell(d.getCell(), true);
+			/*
+			.on("mouseover", function(d) 
+			{
+				grid.highlightHeatmapCell([d], true);
+				console.log("over");
 				d3.select(this).style("fill", MDS_POINT_HIGHLIGHT_COLOR);
 			})
 			.on("mouseout", function(d) {
-				grid.highlightHeatmapCell(d.getCell(), false);
+				grid.highlightHeatmapCell([d], false);
 				d3.select(this).style("fill", "");
 			});
+			*/
 
 	})(gridAnalysis, group, points, xScale, yScale);
 
@@ -215,7 +220,7 @@ function brushmove(p) {
 			}
 		});
 	})(brushedPoints);
-	gridAnalysis.highlightHeatmapCell(brushedMDSPoints, false)
+	//gridAnalysis.highlightHeatmapCell(brushedMDSPoints, false)
 	gridAnalysis.highlightHeatmapCell(brushedPoints, true);
 	brushedMDSPoints = brushedPoints;
 }

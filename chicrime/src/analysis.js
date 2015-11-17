@@ -210,25 +210,73 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 	mds.plotMDS(matrix, this.analysisResults.tsIndex, 2, this);
 }
 
-GridAnalysis.prototype.highlightHeatmapCell = function(cell, highlight)
+GridAnalysis.prototype.hClustering = function()
 {
-	if (Array.isArray(cell))
-	{
-		cell.forEach(function(co) 
-		{
-			var c = co.getCell();
-			d3.select("#heatmap_cell_" + c[0] + "_" + c[1])
-				.style("stroke", highlight ? "black" : "")
-				.style("stroke-width", highlight ? "2px" : "");
-		});	
+	console.log("h clustering...");
+
+	// normalize matrix
+	var matrix = this.analysisResults.simMatrix;
+	var nMatrix = [];
+
+	// figure extents
+	var maxDistance = 0.0;
+
+	for (var i=0, len=matrix.length; i<len; i++) {
+		var row = [];
+		for (var j=0; j<i; j++) {
+			var v = matrix[i][j];
+			if (maxDistance < v) v = maxDistance;
+			row.push(v);
+		}
+		nMatrix.push(row);
 	}
-	else
+
+	for (var i=0, len=nMatrix.length; i<len; i++) {
+		for (var j=0; j<i; j++) {
+			// simiarity = 1.0 - distance
+			nMatrix[i][j] = 1.0 - (nMatrix[i][j] / maxDistance);
+		}
+	}
+
+	this.hCluster = new SimilarityMatrix(nMatrix);
+	this.hCluster.clusterMatrix();
+	console.log("done.");
+}
+
+GridAnalysis.prototype.highlightHeatmapCell = function(cells, highlight)
+{
+	highlightMap = d3.map();
+	for (var i = 0, len = cells.length; i < len; i++) {
+		var c = cells[i].getCell();
+		highlightMap.set(c[0] + "_" + c[1], true);
+	}
+
+	if (cells.length > 0) {
+		(function(hm, grid) {
+			grid.heatmapSelection
+				.style("fill-opacity", function(d) {
+					var c = d.getCell();
+					var highlighted = hm.get(c[0] + "_" + c[1]);
+					return (highlighted ? GRID_OPACITY : 0.05);
+				});
+		})(highlightMap, this);
+	}
+	else {
+		this.heatmapSelection.style("fill-opacity", GRID_OPACITY);
+	}
+	/*
+	cells.forEach(function(co) 
 	{
-		d3.select("#heatmap_cell_" + cell[0] + "_" + cell[1])
+		var c = co.getCell();
+		var selection = d3.select("#heatmap_cell_" + c[0] + "_" + c[1])
 			.style("stroke", highlight ? "black" : "")
 			.style("stroke-width", highlight ? "2px" : "");
-	}
+	});
+	*/
 }
+
+
+var GRID_OPACITY = 0.6;
 
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 {
@@ -280,7 +328,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	var parentGroup = svg.append("g").attr('class', 'heatmap').attr('id', 'heatmap');
 	var overlayGroup = svg.append("g").attr('class', 'heatmap');
 
-	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup) 
+	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup, grid) 
 	{
 		var selection = heatmapGroup.selectAll("path").data(geoRects).enter().append("path")
 			.attr("id", function(d) {
@@ -295,7 +343,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				return colorScale(logScale(d.nValue+1));
 			})
 			.style("fill-opacity", function(d) {
-				if (d.getValue() <= 1) return 0.0; else return 0.6;
+				if (d.getValue() <= 1) return 0.0; else return GRID_OPACITY;
 			})
 			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : ''})
 			.on("mouseenter", function(d, i) 
@@ -320,6 +368,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				d3.select("#heatmapTimeseriesPopup").remove();
 				d3.select(this).attr("class", "");
 			});
+		grid.heatmapSelection = selection;
 
 		// remove cells that don't have any value associsted
 		parentGroup.selectAll('path.delete').remove();
@@ -331,6 +380,6 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 			selection: selection
 		}, "heatmap");
 
-	})(svg, _colorScale, _logScale, parentGroup, overlayGroup);
+	})(svg, _colorScale, _logScale, parentGroup, overlayGroup, this);
 
 }
