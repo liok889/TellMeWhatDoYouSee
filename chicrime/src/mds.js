@@ -57,11 +57,17 @@ function calcMean(A) {
  * =======================
  */
 
-function MDSPoint(coordinate, cell) {
+function MDSPoint(coordinate, cell, _index) {
 	this.coordinate = coordinate;
 	this.cell = cell;
 	this.p = [];
+	this.id = _index;
 }
+
+MDSPoint.prototype.getID = function() {
+	return this.id;
+}
+
 MDSPoint.prototype.getCoordinate = function() {
 	return this.coordinate;
 }
@@ -141,7 +147,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 	
 		// put positions into MDSPoint objects so that we can easily link
 		// them to their corresponding cell in the map
-		points.push( new MDSPoint(p, cellIndex[i]) );
+		points.push( new MDSPoint(p, cellIndex[i], i) );
 	}
 	var xScale = d3.scale.linear().domain(xDomain).range([0+MDS_PADDING, this.w-MDS_PADDING]);
 	var yScale = d3.scale.linear().domain(yDomain).range([0+MDS_PADDING, this.h-MDS_PADDING]);
@@ -151,13 +157,13 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 	var group = this.svg.append("g")
 		.attr("class", "mdsPointGroup");
 
-	(function(grid, g, dataPoints, xS, yS) 
+	(function(grid, g, dataPoints, xS, yS, thisObject) 
 	{
-		g.selectAll("circle").data(dataPoints).enter().append("circle")
+		thisObject.mdsPointSelection = g.selectAll("circle").data(dataPoints).enter().append("circle")
 			.attr("class", "mdsCircle")
 			.attr("cx", function(d) { var x = xS(d.coordinate[0]); d.p[0] = x; return x; })
 			.attr("cy", function(d) { var y = yS(d.coordinate[1]); d.p[1] = y; return y; })
-			.attr("r", MDS_POINT_RADIUS)
+			.attr("r", MDS_POINT_RADIUS);
 			/*
 			.on("mouseover", function(d) 
 			{
@@ -171,7 +177,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 			});
 			*/
 
-	})(gridAnalysis, group, points, xScale, yScale);
+	})(gridAnalysis, group, points, xScale, yScale, this);
 
 	var x = d3.scale.identity().domain([0, this.w]),
 	y = d3.scale.identity().domain([0, this.h]);
@@ -183,6 +189,40 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 		.on("brush", brushmove)
 		.on("brushend", brushend);
 	this.svg.append("g").attr("class", "brush").call(brush);
+}
+
+MDS.prototype.brushPoints = function(ids)
+{
+	if (!ids || ids.length == 0) {
+		this.mdsPointSelection.style("fill", "");
+		return [];
+	}
+	else
+	{
+		var _brushed = [];
+		var _idMap = d3.map();
+		for (var i=0, len=ids.length; i<len; i++) {
+			_idMap.set(ids[i], true);
+		}
+
+		(function(idMap, mdsPointSelection, brushed) {
+
+			mdsPointSelection.style("fill", function(d) 
+			{
+				if (idMap.get(d.getID())) {
+					var n = jQuery(this);
+					n.parent().append(n.detach());
+					brushed.push(d);
+					return MDS_POINT_HIGHLIGHT_COLOR;
+				}
+				else {
+					return "";
+				}
+			});
+
+		})(_idMap, this.mdsPointSelection, _brushed);
+		return _brushed;
+	}
 }
 
 // Clear the previously-active brush, if any.
@@ -198,7 +238,8 @@ function brushstart(p)
 
 // Highlight the selected circles.
 var brushedMDSPoints = [];
-function brushmove(p) {
+
+function brushmove() {
 	var e = brush.extent();
 	var selection = d3.select("#svgMDS").selectAll("circle");
 	
@@ -220,7 +261,6 @@ function brushmove(p) {
 			}
 		});
 	})(brushedPoints);
-	//gridAnalysis.highlightHeatmapCell(brushedMDSPoints, false)
 	gridAnalysis.highlightHeatmapCell(brushedPoints, true);
 	brushedMDSPoints = brushedPoints;
 }

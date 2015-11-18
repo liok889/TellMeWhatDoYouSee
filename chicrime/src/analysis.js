@@ -158,6 +158,7 @@ GeoRect.prototype.projectSelfPath = function()
 
 GridAnalysis.GRAPH_W = 175;
 GridAnalysis.GRAPH_H = 75;
+GridAnalysis.FULL_MATRIX = true;
 
 function drawTimeseries(timeseries, group)
 {
@@ -205,9 +206,14 @@ function drawTimeseries(timeseries, group)
 
 GridAnalysis.prototype.drawMDS = function(svg, width, height)
 {
-	var mds = new MDS(svg);
+	// make a proper (complete) distance matrix from
+	// the similarity matrix we received
 	var matrix = symmetrizeSimMatrix(this.analysisResults.simMatrix);
-	mds.plotMDS(matrix, this.analysisResults.tsIndex, 2, this);
+	this.analysisResults.distanceMatrix = matrix;
+
+	// create a new MDS project object
+	this.mds = new MDS(svg);
+	this.mds.plotMDS(matrix, this.analysisResults.tsIndex, 2, this);
 }
 
 GridAnalysis.prototype.hClustering = function()
@@ -215,43 +221,102 @@ GridAnalysis.prototype.hClustering = function()
 	console.log("h clustering...");
 
 	// normalize matrix
-	var matrix = this.analysisResults.simMatrix;
+	var matrix = this.analysisResults.distanceMatrix;
 	var nMatrix = [];
 
 	// figure extents
-	var maxDistance = 0.0;
+	var maxDistance = -Number.MAX_VALUE;
+	var minDistance = Number.MAX_VALUE;
 
 	for (var i=0, len=matrix.length; i<len; i++) {
 		var row = [];
 		for (var j=0; j<i; j++) {
 			var v = matrix[i][j];
-			if (maxDistance < v) v = maxDistance;
+			if (maxDistance < v) maxDistance = v;
+			if (minDistance > v) minDistance = v;
 			row.push(v);
 		}
 		nMatrix.push(row);
 	}
 
+	var diffDistance = maxDistance - minDistance;
+	console.log("distances: " + maxDistance + ", " + minDistance)
+
 	for (var i=0, len=nMatrix.length; i<len; i++) {
 		for (var j=0; j<i; j++) {
 			// simiarity = 1.0 - distance
-			nMatrix[i][j] = 1.0 - (nMatrix[i][j] / maxDistance);
+			nMatrix[i][j] = 1.0 - ((nMatrix[i][j]-minDistance) / diffDistance);
 		}
 	}
 
-	this.hCluster = new SimilarityMatrix(nMatrix);
-	this.hCluster.clusterMatrix();
+	// set dimensions for matrix elements / dendogram, based on dimensions of the canvas
+	this.onscreenCanvas = document.getElementById('canvasMatrix');
+	var dim = Math.min(+this.onscreenCanvas.width, +this.onscreenCanvas.height);
+
+	SIMMAT_ELEMENT_SIZE = dim / nMatrix.length;
+	SIMMAT_ELEMENT_BORDER = "none";
+	DENDOGRAM_NODE_HEIGHT = 4*SIMMAT_ELEMENT_SIZE/2 + 1;
+
+	// remove any previous dendogram
+	d3.select("#svgDendogram").selectAll("g.dendogramGroup").remove();
+
+	// create a group for the dendogram
+	var matrixGroup = d3.select("#svgDendogram").append("g").attr("class", "dendogramGroup");
+	matrixGroup.attr("transform", "translate(" + d3.select("#svgDendogram").attr("width") + ",0)");
+	this.simMatrix = new SimilarityMatrix(matrixGroup);
+	this.simMatrix.setMatrixVisibility(false);
+	this.simMatrix.setDendogramVisibility(true);
+	//this.simMatrix.dendogramLimit = 3;
+			
+	// update the similarity matrix 
+	this.simMatrix.updateMatrix(nMatrix);
+
+	// render queue
+	var canvasQ = queue();
+	
+	if (!this.offscreenCanvas) {
+		// create an offscreen-canvas
+		this.offscreenCanvas = document.createElement('canvas');
+		this.offscreenCanvas.width = this.onscreenCanvas.width;
+		this.offscreenCanvas.height = this.onscreenCanvas.height;
+	}		
+	
+	(function(onscreenCanvas, offscreenCanvas, simMatrix, grid) 
+	{
+		// render the matrix
+		canvasQ.defer(function(_callback) 
+		{
+			var startTime = new Date();
+			simMatrix.drawToCanvas( offscreenCanvas, null, GridAnalysis.FULL_MATRIX );
+
+			// measure time
+			var endTime = new Date();
+			var processTime = (endTime.getTime() - startTime.getTime())/1000;
+			console.log("matrix rendering took: " + processTime.toFixed(1) + " seconds.");
+			onscreenCanvas.getContext("2d").drawImage(offscreenCanvas, 0, 0);
+			_callback(null);
+		});
+
+		// create cluster brush callbacks
+		simMatrix.setClusterBrushCallback(
+			function(cluster) { grid.brushCluster(cluster); },
+			function(cluster) { grid.unbrushCluster(cluster); }
+		);
+
+	})(this.onscreenCanvas, this.offscreenCanvas, this.simMatrix, this)
 	console.log("done.");
 }
 
-GridAnalysis.prototype.highlightHeatmapCell = function(cells, highlight)
+GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 {
-	highlightMap = d3.map();
-	for (var i = 0, len = cells.length; i < len; i++) {
-		var c = cells[i].getCell();
-		highlightMap.set(c[0] + "_" + c[1], true);
-	}
+	if (cells && cells.length > 0) {
 
-	if (cells.length > 0) {
+		highlightMap = d3.map();
+		for (var i = 0, len = cells.length; i < len; i++) {
+			var c = cells[i].getCell();
+			highlightMap.set(c[0] + "_" + c[1], true);
+		}
+
 		(function(hm, grid) {
 			grid.heatmapSelection
 				.style("fill-opacity", function(d) {
@@ -264,15 +329,6 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells, highlight)
 	else {
 		this.heatmapSelection.style("fill-opacity", GRID_OPACITY);
 	}
-	/*
-	cells.forEach(function(co) 
-	{
-		var c = co.getCell();
-		var selection = d3.select("#heatmap_cell_" + c[0] + "_" + c[1])
-			.style("stroke", highlight ? "black" : "")
-			.style("stroke-width", highlight ? "2px" : "");
-	});
-	*/
 }
 
 
@@ -381,5 +437,87 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 		}, "heatmap");
 
 	})(svg, _colorScale, _logScale, parentGroup, overlayGroup, this);
+}
 
+GridAnalysis.prototype.brushCluster = function(cluster) 
+{
+	// cancel any de-highlight after this
+	this.unbrushReset = undefined;
+	this.newClusterBrush = cluster;
+
+	// draw rectangle around the cluster in the matrix view
+	var r = this.simMatrix.getSize();
+	var s = -1;
+	var brushedIDs = [];
+
+	for (var k=0, len=cluster.members.length; k<len; k++)
+	{
+		var index = cluster.members[k];
+		var i = this.simMatrix.data2ij[cluster.members[k]];
+		if (r > i) r=i;
+		if (s < i) s=i;
+		brushedIDs.push(index);
+	}
+
+	// brush the similarity matrix
+	r *= SIMMAT_ELEMENT_SIZE;
+	s *= SIMMAT_ELEMENT_SIZE;
+
+	if (!this.offscreenCanvas) return;
+	var ctx = document.getElementById("canvasMatrix").getContext("2d");
+	ctx.strokeStyle = "black";
+	ctx.lineWidth = 1.5;
+				
+	if (GridAnalysis.FULL_MATRIX) 
+	{
+		ctx.strokeRect(r, r, s-r, s-r);
+	}
+	else
+	{
+		ctx.beginPath();
+		ctx.moveTo(r, r);
+		ctx.lineTo(r, s);
+		ctx.lineTo(s, s);
+		ctx.closePath();
+		ctx.stroke();
+	}
+
+	// brush dendogram
+	this.simMatrix.highlightCluster(cluster, MDS_POINT_HIGHLIGHT_COLOR);
+
+	// brush the MDS points and then the heatmap
+	this.highlightHeatmapCell(
+		this.mds.brushPoints(brushedIDs)
+	);
+}
+
+
+GridAnalysis.prototype.unbrushCluster = function(cluster) 
+{
+	// redraw matrix from offscreen buffer
+	if (this.offscreenCanvas) {
+		var matrixCanvas = document.getElementById("canvasMatrix");
+		var context = matrixCanvas.getContext("2d");
+		context.clearRect(0, 0, matrixCanvas.width, matrixCanvas.height);
+		context.drawImage(this.offscreenCanvas, 0, 0);
+	}
+
+	// unbrush dendogram
+	this.simMatrix.unhighlightCluster(cluster);
+
+	// unbrush the reset after a timeout (to avoid flickering, in case we got another brush event)
+	(function(grid, cluster) 
+	{
+		grid.unbrushReset = true;
+
+		setTimeout(function() 
+		{
+			// if we got another cluster brush event, cancel the dehighlight
+			if (!grid.unbrushReset) return;
+
+			// unbrush the MDS points
+			grid.mds.brushPoints();
+			grid.highlightHeatmapCell();
+		}, 100);
+	})(this, cluster);
 }

@@ -20,10 +20,15 @@ function TimeSeriesDictionary(alphabetSize, wordSize, windowSize)
 	this.windowSize = windowSize;
 
 	// Find the equiprobably break points in a Gaussian distribution
-	// Note: for this implementation we'll assume a fixed alphabet of a=4 (suggested by algoritm authors)
+	// Note: for this implementation we'll assume a fixed alphabet of a=5 (suggested by algoritm authors)
 	// with the following breakpoints
+	/*
 	this.a = 4;
 	this.breakPoints = [-0.67, 0, 0.67];
+	*/
+
+	this.a = 5;
+	this.breakPoints = [ -0.84, -0.25, 0.25, 0.84 ];
 
 	// create a dictionary
 	this.dictionary = new HashMap();
@@ -49,11 +54,11 @@ TimeSeriesDictionary.prototype.addTimeSeries = function(data)
 			var wordFreq = dictionary.get(word);
 			if (!wordFreq) 
 			{
-				wordFreq = [{id: id, frequency: value}];
+				wordFreq = [{id: id, frequency: value, frequency2: value*value}];
 				dictionary.set(word, wordFreq);
 			}
 			else {
-				wordFreq.push({id: id, frequency: value});
+				wordFreq.push({id: id, frequency: value, frequency2: value*value});
 			}
 		});
 	})(this.dictionary, bagOfStrings);
@@ -67,7 +72,7 @@ TimeSeriesDictionary.prototype.addTimeSeries = function(data)
 var WORK=0;
 TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 {
-	// make a similarity matrix
+	// initialize a similarity matrix with 0s
 	var nn = this.timeSeriesCount;
 	var matrix = new Array(nn);
 	for (var i = 0; i < nn; i++) 
@@ -79,6 +84,8 @@ TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 		}
 		matrix[i] = row;
 	}
+
+	// measure amount of work done (for verfication purposes)
 	WORK=0;
 
 	(function(theMatrix, n, dictionary) 
@@ -86,54 +93,58 @@ TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 		// loop through all words in the dictionary
 		dictionary.forEach(function(commons, word) 
 		{
-			// loop through time series within that word occurence list
-			commons.forEach( function(element) {
-
-				// loop through all time series
+			// loop through time series that have this word as a common
+			commons.forEach( function(element) 
+			{
 				var id = element.id;
-				var freq = element.frequency;
+				var penalty = element.frequency2;
 
-				for (var i = 0; i < n; i++) 
+				// loop through all time series, adding a penalty for them not having that word
+				for (var i = 0; i < id; i++) 
 				{
-					if (i < id) {
-						theMatrix[id][i] -= freq*freq;
-					} 
-					else if (i > id) {
-						theMatrix[i][id] -= freq*freq;
-					}
+					theMatrix[id][i] -= penalty;
+					WORK++;
+				}
+				for (var i = id+1; i < n; i++) 
+				{
+					theMatrix[i][id] -= penalty;
 					WORK++;
 				}
 			});
 
+			// now loop within the commons list, correcting for overpenalty
 			for (var i=1, len=commons.length; i < len; i++) 
 			{
+				var c1 = commons[i];
+				var x	= c1.id;
+				var xFreq  = c1.frequency;
+				var xFreq2 = c1.frequency2;
+
 				for (var j=0; j<i; j++) 
 				{
-					var c1 = commons[i], c2 = commons[j];
-					var x = c1.id;
+					var c2 = commons[j];
 					var y = c2.id;
+					var diff = xFreq - c2.frequency;
 
-					var xFreq = c1.frequency;
-					var yFreq = c2.frequency;
-					var diff = xFreq - yFreq;
-
-					theMatrix[x][y] += xFreq*xFreq + yFreq*yFreq;
-					theMatrix[x][y] -= diff*diff;
+					theMatrix[x][y] = theMatrix[x][y]
+						+ (xFreq2 + c2.frequency2) 		// correction for over-penalty
+						- diff*diff;					// actual penalty for mismatch
 					WORK++;
 				}
 			}
 		});
-		console.log("similarity calculation work: " + WORK);
-	})(matrix, this.timeSeriesCount, this.dictionary);
 
+	})(matrix, this.timeSeriesCount, this.dictionary);
+	
+	console.log("similarity calculation work: " + WORK + " accesses to matrix");
 	return matrix;
 }
 
 TimeSeriesDictionary.prototype.getBagOfStrings = function(data) 
 {
 	// moving window
-	var windowCount = data.length - this.windowSize + 1;
 	var windowSize = this.windowSize;
+	var windowCount = data.length - windowSize + 1;
 	if (windowSize > data.length) 
 	{
 		/*

@@ -1,6 +1,7 @@
 var SIMMAT_ELEMENT_SIZE = 20;
 var SIMMAT_ELEMENT_BORDER = "#eeeeee";
-var MATRIX_COLOR_SCALE = ['rgb(215,48,39)','rgb(252,141,89)','rgb(254,224,144)','rgb(255,255,191)','rgb(224,243,248)','rgb(145,191,219)','rgb(69,117,180)'].reverse();
+//var MATRIX_COLOR_SCALE = ['rgb(215,48,39)','rgb(252,141,89)','rgb(254,224,144)','rgb(255,255,191)','rgb(224,243,248)','rgb(145,191,219)','rgb(69,117,180)'].reverse();
+var MATRIX_COLOR_SCALE = ['#b2182b','#ef8a62','#fddbc7','#ffffff','#e0e0e0','#999999','#4d4d4d'].reverse();
 var DENDOGRAM_NODE_HEIGHT = SIMMAT_ELEMENT_SIZE/2;
 var DENDOGRAM_COLOR = "#959595";
 
@@ -109,6 +110,19 @@ function Cluster(members)
 	this.linkColor = null;
 	this.nodeColor = null;
 	this.selected = null;
+}
+
+Cluster.prototype.isDecendantOf = function(cluster) {
+
+	if (this.parent == cluster) {
+		return true;
+	}
+	else if (this.parent) {
+		return this.parent.isDecendantOf(cluster);
+	}
+	else {
+		return false;
+	}
 }
 
 Cluster.prototype.getID = function() {
@@ -679,7 +693,7 @@ SimilarityMatrix.prototype.setDendogramVisibility = function(v)
 SimilarityMatrix.prototype.updateMatrix = function(matrix, _minSimilarity)
 {
 	this.matrix = matrix;
-	this.minSimilarity = _minSimilarity;
+	this.minSimilarity = (_minSimilarity !== undefined) ? _minSimilarity : 0;
 
 	this.data2ij = [];
 	this.ij2data = [];
@@ -693,7 +707,8 @@ SimilarityMatrix.prototype.updateMatrix = function(matrix, _minSimilarity)
 
 	// cluster
 	this.clusterMatrix();
-	this.drawMatrix();
+	if (this.svg)
+		this.drawMatrix();
 }
 
 SimilarityMatrix.prototype.drawMatrix = function()
@@ -803,40 +818,45 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 				child2.dendogram.centroid * SIMMAT_ELEMENT_SIZE + SIMMAT_ELEMENT_SIZE/2
 			];
 
-			var branchPlaceholder = thisMatrix.dendogramGroup.append("rect")
+			var rW = (thisCluster.dendogram.depth) * DENDOGRAM_NODE_HEIGHT;
+			var rH = cc2[1]-cc1[1];
 
-				.attr("x", _myX)
-				.attr("y", cc1[1])
-				.attr("width", (thisCluster.dendogram.depth) * DENDOGRAM_NODE_HEIGHT)
-				.attr("height", cc2[1]-cc1[1])
-				.attr("stroke", "none")
-				.attr("fill", "rgba(255, 255, 255, 0.0)")
-				.on("mouseover", function() 
-				{
-					if (thisMatrix.clusterBrushCallback) {
-						thisMatrix.clusterBrushCallback(thisCluster);
-					}
-				})
-				.on("mouseout", function() 
-				{
-					if (thisMatrix.clusterUnbrushCallback) {
-						thisMatrix.clusterUnbrushCallback(thisCluster);
-					}
-				})
-				.on("dblclick", function() {
-					if (thisMatrix.clusterDblClickCallback) {
-						thisMatrix.clusterDblClickCallback(thisCluster);
-					}
-				});
+			if (rH > 1 && rW > 1) {
+				var branchPlaceholder = thisMatrix.dendogramGroup.append("rect")
 
-			if (thisMatrix.dendogramEvents) 
-			{
-				thisMatrix.dendogramEvents.forEach(function(eventName, __callback) 
-				{
-					branchPlaceholder.on(eventName, function() {
-						__callback(thisCluster);
+					.attr("x", _myX)
+					.attr("y", cc1[1])
+					.attr("width", rW)
+					.attr("height", rH)
+					.attr("stroke", "none")
+					.attr("fill", "rgba(255, 255, 255, 0.0)")
+					.on("mouseover", function() 
+					{
+						if (thisMatrix.clusterBrushCallback) {
+							thisMatrix.clusterBrushCallback(thisCluster);
+						}
+					})
+					.on("mouseout", function() 
+					{
+						if (thisMatrix.clusterUnbrushCallback) {
+							thisMatrix.clusterUnbrushCallback(thisCluster);
+						}
+					})
+					.on("dblclick", function() {
+						if (thisMatrix.clusterDblClickCallback) {
+							thisMatrix.clusterDblClickCallback(thisCluster);
+						}
 					});
-				});
+
+				if (thisMatrix.dendogramEvents) 
+				{
+					thisMatrix.dendogramEvents.forEach(function(eventName, __callback) 
+					{
+						branchPlaceholder.on(eventName, function() {
+							__callback(thisCluster);
+						});
+					});
+				}
 			}
 				
 		})(cluster, this, myX);
@@ -863,7 +883,20 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 				.attr("x2", function(d) { return d.x2} )
 				.attr("y2", function(d) { return d.y2} )
 				.attr("stroke", DENDOGRAM_COLOR)
-				.attr("stroke-width", "1px");
+				.attr("stroke-width", "1px")
+				.on("mouseover", function() 
+				{
+					if (thisMatrix.clusterBrushCallback) {
+						thisMatrix.clusterBrushCallback(thisCluster);
+					}
+				})
+				.on("mouseout", function() 
+				{
+					if (thisMatrix.clusterUnbrushCallback) {
+						thisMatrix.clusterUnbrushCallback(thisCluster);
+					}
+				});
+
 		})(cluster, this);
 	}
 			

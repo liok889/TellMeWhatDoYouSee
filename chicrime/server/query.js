@@ -159,6 +159,7 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 	var maxCol = Number.MIN_VALUE;
 
 	// create a dictionary of time series
+	var startTime = new Date();
 	var tsDictionary = new TimeSeriesDictionary(ALPHABET_SIZE, WORD_SIZE, WINDOW_SIZE);
 
 	// loop through all returned documentes
@@ -225,7 +226,11 @@ function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
 
 	console.log("Calculating similarity for: " + tsDictionary.getTimeSeriesCount() + " series...");
 	var simMatrix = tsDictionary.calcSimilarityMatrix();
-	console.log("done");
+	
+	// measure time for the whole process
+	var endTime = new Date();
+	var processTime = (endTime.getTime() - startTime.getTime())/1000;
+	console.log("Done. Time series analysis took: " + processTime.toFixed(1) + " seconds.");
 	
 	return {
 		timeseries: data, 
