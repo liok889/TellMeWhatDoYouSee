@@ -163,7 +163,8 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 			.attr("class", "mdsCircle")
 			.attr("cx", function(d) { var x = xS(d.coordinate[0]); d.p[0] = x; return x; })
 			.attr("cy", function(d) { var y = yS(d.coordinate[1]); d.p[1] = y; return y; })
-			.attr("r", MDS_POINT_RADIUS);
+			.attr("r", MDS_POINT_RADIUS)
+			.attr("id", function(d) { return "mds_circle_" + d.cell[0] + "_" + d.cell[1]; });
 			/*
 			.on("mouseover", function(d) 
 			{
@@ -223,6 +224,10 @@ MDS.prototype.brushPoints = function(ids)
 		})(_idMap, this.mdsPointSelection, _brushed);
 		return _brushed;
 	}
+}
+
+MDS.prototype.brushSinglePoint = function(r, c, highlight)
+{
 }
 
 // Clear the previously-active brush, if any.

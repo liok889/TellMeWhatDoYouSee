@@ -102,6 +102,19 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
+function testSymmetry(matrix) {
+
+	for (var i=0, len=matrix.length; i<len; i++) {
+		for (var j=0; j < i; j++) {
+			if (matrix[i][j] !== matrix[j][i])
+			{
+				console.log("** MATRIX not symmetric at " + i + " x " + j);
+				return false;
+			}
+		}
+	}
+	return true;
+}
 // send the analysis reuest as a JSON request
 GridAnalysis.prototype.sendRequest = function(_callback)
 {
@@ -115,8 +128,15 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			data: JSON.stringify(jsonRequest),
 			success: function(response, textStatus, xhr) 
 			{
+				// parse the JSON reponse we received
 				jsonResponse = JSON.parse(response);
 				gridAnalysis.analysisResults = jsonResponse;
+
+				// make a proper (complete) distance matrix from
+				// the similarity matrix we received
+				gridAnalysis.analysisResults.distanceMatrix = symmetrizeSimMatrix(gridAnalysis.analysisResults.simMatrix);
+				//testSymmetry(gridAnalysis.analysisResults.distanceMatrix);
+				// make a callback
 				if (callback) callback(jsonResponse);
 			},
 
@@ -159,6 +179,7 @@ GeoRect.prototype.projectSelfPath = function()
 GridAnalysis.GRAPH_W = 175;
 GridAnalysis.GRAPH_H = 75;
 GridAnalysis.FULL_MATRIX = true;
+GridAnalysis.MATRIX_ELEMENT_BRUSH = 0;
 
 function drawTimeseries(timeseries, group)
 {
@@ -206,14 +227,29 @@ function drawTimeseries(timeseries, group)
 
 GridAnalysis.prototype.drawMDS = function(svg, width, height)
 {
-	// make a proper (complete) distance matrix from
-	// the similarity matrix we received
-	var matrix = symmetrizeSimMatrix(this.analysisResults.simMatrix);
-	this.analysisResults.distanceMatrix = matrix;
-
 	// create a new MDS project object
 	this.mds = new MDS(svg);
-	this.mds.plotMDS(matrix, this.analysisResults.tsIndex, 2, this);
+	(function(mds, matrix, tsIndex, dimensions, grid) 
+	{
+		// async MDS analysis
+		var q = queue();
+		q.defer(function(_callback) 
+		{
+			var startTime = new Date();
+			mds.plotMDS(matrix, tsIndex, dimensions, grid);
+			var processTime = (new Date) - startTime;
+			console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
+			_callback(null);
+		});
+
+	})(
+		this.mds, 
+		this.analysisResults.distanceMatrix,
+		this.analysisResults.tsIndex,
+		2,
+		this
+	);
+
 }
 
 GridAnalysis.prototype.hClustering = function()
@@ -230,11 +266,17 @@ GridAnalysis.prototype.hClustering = function()
 
 	for (var i=0, len=matrix.length; i<len; i++) {
 		var row = [];
-		for (var j=0; j<i; j++) {
-			var v = matrix[i][j];
-			if (maxDistance < v) maxDistance = v;
-			if (minDistance > v) minDistance = v;
-			row.push(v);
+		for (var j=0; j<len; j++) {
+			if (i == j) {
+				row.push(0);
+			}
+			else
+			{
+				var v = matrix[i][j];
+				if (maxDistance < v) maxDistance = v;
+				if (minDistance > v) minDistance = v;
+				row.push(v);
+			}
 		}
 		nMatrix.push(row);
 	}
@@ -242,20 +284,27 @@ GridAnalysis.prototype.hClustering = function()
 	var diffDistance = maxDistance - minDistance;
 	console.log("distances: " + maxDistance + ", " + minDistance)
 
-	for (var i=0, len=nMatrix.length; i<len; i++) {
-		for (var j=0; j<i; j++) {
+	for (var i=0, len=nMatrix.length; i<len; i++) 
+	{
+		for (var j=0; j<len; j++) 
+		{
 			// simiarity = 1.0 - distance
 			nMatrix[i][j] = 1.0 - ((nMatrix[i][j]-minDistance) / diffDistance);
 		}
+		nMatrix[i][i] = 1.0;
 	}
 
 	// set dimensions for matrix elements / dendogram, based on dimensions of the canvas
 	this.onscreenCanvas = document.getElementById('canvasMatrix');
 	var dim = Math.min(+this.onscreenCanvas.width, +this.onscreenCanvas.height);
+	dim -= GridAnalysis.MATRIX_ELEMENT_BRUSH;
 
 	SIMMAT_ELEMENT_SIZE = dim / nMatrix.length;
+	console.log("SimMatrix element size: " + SIMMAT_ELEMENT_SIZE);
 	SIMMAT_ELEMENT_BORDER = "none";
-	DENDOGRAM_NODE_HEIGHT = 4*SIMMAT_ELEMENT_SIZE/2 + 1;
+	DENDOGRAM_NODE_HEIGHT = 5;
+		//simMatrix.getDendogramDepth() / (d3.select("#svgDendogram").attr("width") - 15);
+		//4*SIMMAT_ELEMENT_SIZE/2 + 1;
 
 	// remove any previous dendogram
 	d3.select("#svgDendogram").selectAll("g.dendogramGroup").remove();
@@ -336,34 +385,27 @@ var GRID_OPACITY = 0.6;
 
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 {
-	var minValue = Number.MAX_VALUE;
-	var maxValue = Number.MIN_VALUE;
+	var minValue =  Number.MAX_VALUE;
+	var maxValue = -Number.MAX_VALUE;
 
 	// scan and make sure everything is in order
 	var rows = this.analysisRequest.gridRows;
 	var cols = this.analysisRequest.gridCols;
 
-	for (var i=0; i < rows; i++) 
-	{
-		if (!heatmap[i]) heatmap[i] = [];
-
-		for (var j=0; j < cols; j++) 
-		{
-			if (!heatmap[i][j]) heatmap[i][j] = 0;
-			minValue = Math.min(heatmap[i][j], minValue);
-			maxValue = Math.max(heatmap[i][j], maxValue);
-		}
-	}
-
 	var geoRects = [];
 	for (var i=0; i < rows; i++) 
 	{
+		if (!heatmap[i]) continue;
 		for (var j=0; j<cols; j++) 
 		{
-			var geoCoord = this.analysisRequest.grid[i][j]
-			var count = heatmap[i][j];
-			
-			if (count > 0) {
+			if (heatmap[i][j]) 
+			{
+				maxValue = Math.max(heatmap[i][j], maxValue);
+				minValue = Math.min(heatmap[i][j], minValue);
+
+				var geoCoord = this.analysisRequest.grid[i][j]
+				var count = heatmap[i][j];
+				
 				geoRects.push(new GeoRect(
 					count,
 					timeseries[i][j],
@@ -376,7 +418,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	}
 
 	// produce color for the heatmap
-	var _logScale = d3.scale.log().domain([1, maxValue+1]).range([0, 1]);
+	var _logScale = d3.scale.log().domain([minValue+1, maxValue+1]).range([0, 1]);
 	var _colorScale = d3.scale.quantize([0, 1]).range(HEATMAP_COLOR);
 
 	svg.selectAll("g.heatmap").remove();
@@ -439,6 +481,11 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	})(svg, _colorScale, _logScale, parentGroup, overlayGroup, this);
 }
 
+GridAnalysis.prototype.brushCell = function(cells)
+{
+	
+}
+
 GridAnalysis.prototype.brushCluster = function(cluster) 
 {
 	// cancel any de-highlight after this
@@ -466,11 +513,11 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 	if (!this.offscreenCanvas) return;
 	var ctx = document.getElementById("canvasMatrix").getContext("2d");
 	ctx.strokeStyle = "black";
-	ctx.lineWidth = 1.5;
+	ctx.lineWidth = 1;
 				
 	if (GridAnalysis.FULL_MATRIX) 
 	{
-		ctx.strokeRect(r, r, s-r, s-r);
+		ctx.strokeRect(r, r, s-r+SIMMAT_ELEMENT_SIZE, s-r+SIMMAT_ELEMENT_SIZE);
 	}
 	else
 	{
@@ -518,6 +565,6 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 			// unbrush the MDS points
 			grid.mds.brushPoints();
 			grid.highlightHeatmapCell();
-		}, 100);
+		}, 200);
 	})(this, cluster);
 }

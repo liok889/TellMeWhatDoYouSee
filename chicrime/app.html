@@ -143,9 +143,9 @@
 		<form>
 			<input value="yearly" name="signalAggregate" id="radioWarpYearly" type="radio">yearly (day)<br>
 			<input value="monthly" name="signalAggregate" id="radioWarpMonthly" type="radio">monthly (6 hours)<br>
-			<input value="weekly" name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
+			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
 			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">daily (30 min)<br>
-			<input value="total" checked name="signalAggregate" id="radioWarpDaily" type="radio">total<br>
+			<input value="total" name="signalAggregate" id="radioWarpDaily" type="radio">total<br>
 
 			<input id="buttonRunAnalysis" type="button" value="run analysis" style="background: #FFBDBD;font-family: helvetica; font-size: 10pt; font-weight: 100">
 		</form>
@@ -163,8 +163,8 @@
 	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc"></svg>
 
 	<!-- similarity matrix and dendogram pane -->
-	<svg id="svgDendogram" width="100" height="320" style="position: absolute; top: 520px; left: 1090px; border: solid 1px #cccccc"></svg>
-	<canvas id="canvasMatrix" width="320" height="320" style="position: absolute; top: 520px; left: 1190px; border: solid 1px #cccccc"></canvas>
+	<svg id="svgDendogram" width="100" height="320" style="position: absolute; top: 520px; left: 1090px; border: none"></svg>
+	<canvas id="canvasMatrix" width="320" height="320" style="position: absolute; top: 520px; left: 1190px; border: none"></canvas>
 
 
 	<script type="text/javascript">
@@ -282,15 +282,17 @@
 					// turn off load spinner
 					d3.select("#loadSpinner").style("visibility", "hidden");
 
-					// load heatmap
+					// show heatmap of aggregate crimes
 					gridAnalysis.makeHeatmap(jsonResponse.aggregate, jsonResponse.timeseries);
-					gridAnalysis.drawMDS(d3.select("#svgMDS"));
-
 					SHOW_HEATMAP = true;
 					d3.select("#checkShowHeatmap").node().checked = true;
-
+					
 					// heirarhical clustering
 					gridAnalysis.hClustering();
+
+					// MDS analysis
+					gridAnalysis.drawMDS(d3.select("#svgMDS"));
+
 				})
 			});
 

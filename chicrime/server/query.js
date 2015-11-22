@@ -113,18 +113,18 @@ module.exports = {
 
 			}
 
-
 			// now put all those combines into the aggregate function
 			var stages = [ {$match: match}, {$project: project}, {$group: group} ];
 
 			// print out some info
 			console.log("Aggregate query:")
 			console.log("\twarp: " + query.signalAggregate);
-			//console.log("\tlimit year: " + query.limitYear);
 			console.log("\trange: " + query.yearRange);
+			/*
 			console.log("\tcellOffset: " + query.cellOffset.lat + ", " + query.cellOffset.lon);
 			console.log("\tgridMin: " + query.gridMin.lat + ", " + query.gridMin.lon);
 			console.log("\tgridMax: " + query.gridMax.lat + ", " + query.gridMax.lon);
+			*/
 
 			// execute the aggregate onto the database
 			(function(N, query) {
@@ -132,10 +132,60 @@ module.exports = {
 				{
 					// check for error
 					assert.equal(null, err);
-					console.log("\t Received: " + docs.length + " documents from aggregate function.");
+					console.log("Received: " + docs.length + " docs from DB.");
 					
-					// do the callback
-					callback( makeTimeSeries(N, docs, query.gridRows, query.gridCols, query.cellOffset) );
+					// loop through the documents and put them in [row][col][timeseries] format
+					var 
+						data = [], 			// data for the time series
+						sums = [], 			// sums for each cell
+						total = 0, 			// sums for all the cells
+						cellCount = 0,		// number of cells
+						series = [];		// list of time series that have actual data
+
+					// loop through all returned documentes
+					for (var i = 0, len = docs.length; i < len; i++) 
+					{
+						var doc = docs[i];
+						var r = +doc._id.rowNum; if (query.cellOffset.lat < 0) r = query.gridRows - 1 + r;
+						var c = +doc._id.colNum; if (query.cellOffset.lon < 0) c = query.gridCols - 1 + c;
+						var tIndex = doc._id.tIndex ? +doc._id.tIndex : 0;
+						
+						if (!data[r]) {
+							data[r] = [];
+							sums[r] = [];
+						}
+
+						if (!data[r][c]) 
+						{
+							// initialize time series with empty counts
+							var arr = new Array(N);
+							for (var j = 0; j < N; j++) { arr[j] = 0; }
+							
+							data[r][c] = arr;
+							sums[r][c] = 0;
+							series.push( {
+								data: arr,
+								r: r, c: c 
+							});
+						}
+
+						var v = +doc.crimeCount;
+						data[r][c][tIndex] = v;
+						sums[r][c] += v;
+						total += v;
+					}
+
+					// make a time series
+					console.log("total: " + total);
+					var ret = makeTimeSeries(data, sums, total / series.length, series);
+					
+					// callback
+					callback( {
+						timeseries: 	data,
+						aggregate: 		sums,
+						simMatrix: 		ret.simMatrix,
+						tsIndex: 		ret.tsIndex 
+					});
 				
 					// close database
 					db.close();
@@ -149,94 +199,88 @@ module.exports = {
 
 var ALPHABET_SIZE = 4;
 var WORD_SIZE = 8;
-var WINDOW_SIZE = 96;
+var WINDOW_SIZE = 88; //96;
+var MAX_DEVIATION = 3;			// max deviation from standard deviation for each cell
+var MAX_LOG_STRESS = 1.75;
 
 // generates a matrix from results that are indexed by rows and columns
-function makeTimeSeries(N, docs, gridRows, gridCols, cellOffset)
+function makeTimeSeries(data, sums, mean, series)
 {
-	var data = [];
-	var maxRow = Number.MIN_VALUE;
-	var maxCol = Number.MIN_VALUE;
-
-	// create a dictionary of time series
+	// keep track of processing time
 	var startTime = new Date();
+	var filtered = 0;
+	var maxIncidence = 0;
+
+	// calculate standard deviation for
+	// sums of series in each individual cell
+	var std = 0;
+	for (var i = 0, len = series.length; i < len; i++) 
+	{
+		var s = series[i];
+		var sum = sums[s.r][s.c];
+		var diff = sum - mean;
+		std += diff*diff;
+
+		if (sum > maxIncidence) {
+			maxIncidence = sum;
+		}
+	}
+	std = Math.sqrt(std / series.length);
+
+	var logStress = Math.log10(maxIncidence);
+	var minFilter = 0;
+	if (logStress > MAX_LOG_STRESS) {
+		minFilter = Math.floor(Math.pow(10, logStress-MAX_LOG_STRESS));
+	}
+	console.log("Data characteristics:");
+	console.log("=====================");
+	console.log("\tN: " + series.length);
+	console.log("\tMean: " + mean.toFixed(3));
+	console.log("\tSTD: " + std.toFixed(3));
+	console.log("\tMax: " + maxIncidence);
+	console.log("\tFilter: " + minFilter);
+
+
+	// construct a time series dictionary
 	var tsDictionary = new TimeSeriesDictionary(ALPHABET_SIZE, WORD_SIZE, WINDOW_SIZE);
-
-	// loop through all returned documentes
-	for (var i = 0, len = docs.length; i < len; i++) 
-	{
-		var doc = docs[i];
-		var r = +doc._id.rowNum; if (cellOffset.lat < 0) r = gridRows-1 + r;
-		var c = +doc._id.colNum; if (cellOffset.lon < 0) c = gridCols-1 + c;
-		var tIndex = doc._id.tIndex ? +doc._id.tIndex : 0;
-
-		//console.log("document=> r: " + r + ", c: " + c + ", tIndex: " + tIndex + ", count: " + doc.crimeCount)
-		
-		// keep track of the max column/row index
-		maxRow = Math.max(r, maxRow);
-		maxCol = Math.max(c, maxCol);
-
-
-		if (!data[r]) data[r] = [];
-		if (!data[r][c]) 
-		{ 
-			var arr = new Array(N);
-			for (var j = 0; j < N; j++) { arr[j] = 0; }
-			data[r][c] = arr;
-		}
-		data[r][c][tIndex] = +doc.crimeCount;
-	}
-
-	// count time-series aggregate (heatmap) and analyze the time-series 
-	var aggregate = [];
+	
+	// loop through the time series again, adding only the onles that are not more than
+	// 3 x standard deviation away from the mean 
 	var tsIndex = [];
-	for (var i = 0, len = data.length; i < len; i++) 
+	for (var i = 0, len = series.length; i < len; i++) 
 	{
-		if (!data[i]) continue;
-		
-		var row = data[i];
-		var aggRow = [];
+		var s = series[i];
+		var sum = sums[s.r][s.c];
+		var timeseries = data[s.r][s.c];
 
-		for (var j = 0, len2 = row.length; j < len2; j++) 
+		var stdDiff = Math.abs(sum - mean) / std;
+		//console.log("\t\t std diff: " + stdDiff.toFixed(3) + ", count: " + sums[s.r][s.c]);
+		if (sum < minFilter || !Array.isArray(timeseries)) 
 		{
-			if (!row[j]) continue;
-			var timeseries = row[j];
-			var total = 0;
-
-			// if no timeseries data for this block, just mark as having a zero count
-			// also update the data record and put an empty array instead of a non-exsiting object
-			
-			if (Array.isArray(timeseries)) 
-			{
-				if (timeseries.length > 1) 
-				{
-					// add this time series to the dictionary
-					var ret = tsDictionary.addTimeSeries(timeseries);
-					tsIndex.push([i, j]);
-				}
-
-				for (var k=0, len3=timeseries.length; k < len3; k++) {
-					total += isNaN(timeseries[k]) ? 0 : +timeseries[k];
-				}
-			}
-			aggRow[j] = total;
+			// remove time series from our calculations
+			data[s.r][s.c] = undefined;
+			sums[s.r][s.c] = undefined;
+			filtered++;
 		}
-		aggregate[i] = aggRow;
+		else
+		{
+			tsDictionary.addTimeSeries(timeseries);
+			tsIndex.push([s.r, s.c]);
+		}
 	}
 
-	console.log("Calculating similarity for: " + tsDictionary.getTimeSeriesCount() + " series...");
+	// calculate similarity matrix
 	var simMatrix = tsDictionary.calcSimilarityMatrix();
 	
-	// measure time for the whole process
+	// measure time for the whole thing
 	var endTime = new Date();
 	var processTime = (endTime.getTime() - startTime.getTime())/1000;
 	console.log("Done. Time series analysis took: " + processTime.toFixed(1) + " seconds.");
+	console.log("Removed " + filtered + " series.");
 	
 	return {
-		timeseries: data, 
 		simMatrix: simMatrix,
 		tsIndex: tsIndex,
-		aggregate: aggregate
 	};
 }
 

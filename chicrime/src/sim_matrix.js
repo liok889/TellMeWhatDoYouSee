@@ -27,18 +27,21 @@ SimilarityMatrix.prototype.drawToCanvas = function(canvas, maxElements, fullMatr
 	var colorScale = d3.scale.quantize().domain([this.minSimilarity,1]).range(MATRIX_COLOR_SCALE);
 
 	var y = 0;
-	for (var i = 0; i < matrixLen; i++) 
+	for (var i = 0; i < matrixLen; i++, y += SIMMAT_ELEMENT_SIZE) 
 	{
 		var fence = fullMatrix ? matrixLen : i;
 		var x = 0;
-		y += SIMMAT_ELEMENT_SIZE;
-
 		for (var j = 0; j < fence; j++, x += SIMMAT_ELEMENT_SIZE) 
 		{
 			ctx.fillStyle = colorScale(simMatrix[i][j]);
 			ctx.fillRect(x, y, SIMMAT_ELEMENT_SIZE, SIMMAT_ELEMENT_SIZE);
 		}
 	}
+}
+
+SimilarityMatrix.prototype.getDendogramDepth = function()
+{
+	return this.clusters.dendogram.depth;
 }
 
 SimilarityMatrix.prototype.draw = function()
