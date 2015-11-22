@@ -390,7 +390,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 				.style("fill-opacity", function(d) {
 					var c = d.getCell();
 					var highlighted = hm.get(c[0] + "_" + c[1]);
-					return (highlighted ? GRID_OPACITY : 0.05);
+					return (highlighted ? GRID_OPACITY : 0.0);
 				});
 		})(highlightMap, this);
 	}
