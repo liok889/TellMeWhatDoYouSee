@@ -625,6 +625,28 @@ SimilarityMatrix.prototype.brush = function(i)
 	}
 }
 
+SimilarityMatrix.prototype.brushElements = function(elements, color)
+{
+	if (this.svg) {
+
+		var elementLayout = [];
+		for (var i = 0, len = elements.length; i < len; i++)
+			elementLayout.push(this.data2ij[ elements[i] ]);
+
+		this.svg.selectAll("g.elementBrush").remove();
+		var g = this.svg.append("g")
+			.attr("class", "elementBrush");
+		g.selectAll("circle").data(elementLayout).enter().append("circle")
+			.attr("cx", +this.svg.attr("width") - 5)
+			.attr("cy", function(d) {
+				return d * SIMMAT_ELEMENT_SIZE;
+			})
+			.attr("r", "3.5")
+			.style("fill", color ? color : "#222222")
+			.style("stroke", "none");
+	}
+}
+
 SimilarityMatrix.prototype.brushCluster = function(cluster)
 {
 	if (this.floatingLenses) {
