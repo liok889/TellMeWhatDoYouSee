@@ -207,9 +207,9 @@ MDS.prototype.brushPoints = function(ids)
 		this.mdsPointSelection.style("fill", "").style("fill-opacity", "").style("stroke", "");
 
 		// restored brushed selection, if any
-		if (this.brushedSelection) {
-			this.brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR);
-			//this.brushmove(true);
+		if (this.brushedSelection) 
+		{
+			this.brushmove(true);
 		}
 		return [];
 	}
@@ -217,7 +217,7 @@ MDS.prototype.brushPoints = function(ids)
 	{
 		// if existing brushed selection, dim down the opacity of those
 		if (this.brushedSelection) {
-			this.brushedSelection.style("fill-opacity", "0.1").style("stroke", "none");
+			this.brushedSelection.style("fill-opacity", "0.15").style("stroke", "none");
 		}
 
 		// unpack list of of IDs to brush
@@ -299,23 +299,24 @@ MDS.prototype.brushmove = function(hasNotMoved)
 					return true;
 				}			
 			});
-			
-			// de-highlight all points
-			selection.style("fill", "");
-
-			// highlight only the brushed selection
-			brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR);
 			return brushedSelection;
-
+			
 		})(brushedPoints, brushedIDs, this.svg);
 	}
 	else
 	{
 		brushedIDs = this.brushedIDs;
 		brushedSelection = this.brushedSelection;
+		brushedPoints = this.brushedMDSPoints;
 	}
+
+	// de-highlight all points
+	this.svg.selectAll("circle").style("fill", "");
+
+	// highlight only the brushed selection
+	brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR);
 	
-	if (brushedSelection && brushedSelection.size() > 0) 
+	if (brushedSelection.size() > 0) 
 	{
 		this.brushedSelection = brushedSelection;
 	}

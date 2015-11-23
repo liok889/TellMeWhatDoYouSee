@@ -597,9 +597,12 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 			// if we got another cluster brush event, cancel the dehighlight
 			if (!grid.unbrushReset) return;
 
+			// unbrush the geographical heatmap
+			grid.highlightHeatmapCell();
+
 			// unbrush the MDS points
 			grid.mds.brushPoints();
-			grid.highlightHeatmapCell();
+
 		}, 200);
 	})(this, cluster);
 }
