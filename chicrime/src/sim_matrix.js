@@ -639,10 +639,11 @@ SimilarityMatrix.prototype.brushElements = function(elements, color)
 		g.selectAll("circle").data(elementLayout).enter().append("circle")
 			.attr("cx", +this.svg.attr("width") - 5)
 			.attr("cy", function(d) {
-				return d * SIMMAT_ELEMENT_SIZE;
+				return d * SIMMAT_ELEMENT_SIZE + SIMMAT_ELEMENT_SIZE/2;
 			})
 			.attr("r", "3.5")
 			.style("fill", color ? color : "#222222")
+			.style("fill-opacity", "0.35")
 			.style("stroke", "none");
 	}
 }
