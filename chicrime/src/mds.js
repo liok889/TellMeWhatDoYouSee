@@ -130,13 +130,16 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 {
 	// remove an earlier MDS group and create a new one
 	this.svg.selectAll("g.mdsPointGroup").remove();
-	if (this.brush) {
+	if (this.brush) 
+	{
 		// remove brush
-		this.brushend();
-		this.svg.selectAll(".brush").remove();
+		this.brush.clear();
+		this.svg.selectAll("g.brush").remove();
 		this.brush = undefined;
 		this.brushCell = undefined;
 	}
+	this.brushedMDSPoints = undefined;
+	this.brushedIDs = undefined;
 
 	// create a new <g> for the MDS points
 	var group = this.svg.append("g")
@@ -169,6 +172,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 
 	(function(grid, g, dataPoints, xS, yS, thisObject) 
 	{
+		// create circles
 		thisObject.mdsPointSelection = g.selectAll("circle").data(dataPoints).enter().append("circle")
 			.attr("class", "mdsCircle")
 			.attr("cx", function(d) { var x = xS(d.coordinate[0]); d.p[0] = x; return x; })
@@ -176,24 +180,30 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 			.attr("r", MDS_POINT_RADIUS)
 			.attr("id", function(d) { return "mds_circle_" + d.cell[0] + "_" + d.cell[1]; });
 
-		var x = d3.scale.identity().domain([0, thisObject.w]),
-		y = d3.scale.identity().domain([0, thisObject.h]);
+		// create the brush, if doesn't already exist
+		if (!thisObject.brush) 
+		{
+			// create a scale for the brush
+			var x = d3.scale.identity().domain([0, thisObject.w]);
+			var y = d3.scale.identity().domain([0, thisObject.h]);
+			
+			// create a brush, if one does not already exist
+			thisObject.brush = d3.svg.brush();
+			thisObject.brush
+				.x(x)
+				.y(y)
+				.on("brushstart", function() {
+					thisObject.brushstart();
+				})
+				.on("brush", function() {
+					thisObject.brushmove();
+				})
+				.on("brushend", function() {
+					thisObject.brushend();
+				});
 
-		thisObject.brush = d3.svg.brush()
-			.x(x)
-			.y(y)
-			.on("brushstart", function() {
-				thisObject.brushstart();
-			})
-			.on("brush", function() {
-				thisObject.brushmove();
-			})
-			.on("brushend", function() {
-				thisObject.brushend();
-			});
-
-		thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
-
+			thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
+		}
 	})(gridAnalysis, group, points, xScale, yScale, this);
 	
 	// store reference to GridAnalysis

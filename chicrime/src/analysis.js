@@ -247,7 +247,10 @@ function drawTimeseries(timeseries, group)
 GridAnalysis.prototype.drawMDS = function(svg, width, height)
 {
 	// create a new MDS project object
-	this.mds = new MDS(svg);
+	if (!this.mds) {
+		this.mds = new MDS(svg);
+	}
+
 	(function(mds, matrix, tsIndex, dimensions, grid) 
 	{
 		// async MDS analysis
@@ -514,11 +517,12 @@ GridAnalysis.prototype.brushCells = function(cells)
 		brushedIDs.push(  this.ij2index[ cell[0] ][ cell[1] ]  );
 	}
 
+	// brush similarity matrix as well
+	this.simMatrix.brushElements(brushedIDs, MDS_POINT_HIGHLIGHT_COLOR);
+
 	// brush MDS plot
 	this.mds.brushPoints(brushedIDs);
 
-	// brush similarity matrix as well
-	this.simMatrix.brushElements(brushedIDs, MDS_POINT_HIGHLIGHT_COLOR);
 }
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
