@@ -350,20 +350,3 @@ MDS.prototype.brushend = function()
 		this.svg.selectAll("circle").style("fill", "");		
 	} 
 }
-
-function symmetrizeSimMatrix(matrix)
-{
-	var n = matrix.length;
-	for (var i = 0; i < n; i++) 
-	{
-		matrix[i].length = n;
-		matrix[i][i] = 0;
-		for (var j = i+1; j < n; j++) 
-		{
-			matrix[j][i] *= -1;
-			matrix[i][j] = matrix[j][i];
-		}
-	}
-	return matrix;
-}
-

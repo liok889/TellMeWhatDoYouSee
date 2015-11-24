@@ -921,7 +921,14 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 					if (thisMatrix.clusterUnbrushCallback) {
 						thisMatrix.clusterUnbrushCallback(thisCluster);
 					}
+				})
+				.on("dblclick", function() 
+				{
+					if (thisMatrix.clusterDblClickCallback) {
+						thisMatrix.clusterDblClickCallback(thisCluster);
+					}
 				});
+
 
 		})(cluster, this);
 	}

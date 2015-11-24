@@ -13,6 +13,9 @@
 
 var HashMap = require("hashmap");
 
+var EQUIPROBABLE_BREAKS = false;
+var P_HIST_BINS = 200;
+
 function TimeSeriesDictionary(alphabetSize, wordSize, windowSize)
 {
 	this.a = alphabetSize;
@@ -138,6 +141,11 @@ TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 	
 	console.log("similarity calculation work: " + WORK + " accesses to matrix");
 	return matrix;
+}
+
+TimeSeriesDictionary.prototype.calcEquiprobablyBreaks = function()
+{
+
 }
 
 TimeSeriesDictionary.prototype.getBagOfStrings = function(data) 

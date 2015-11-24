@@ -3,15 +3,21 @@
  * ============================================
  */
 
-var HEATMAP_COLOR = ['#67001f','#b2182b','#d6604d','#f4a582','#fddbc7','#ffffff','#e0e0e0','#bababa','#878787','#4d4d4d','#1a1a1a'].reverse();
-//var HEATMAP_COLOR = ['#fee5d9','#fcbba1','#fc9272','#fb6a4a','#ef3b2c','#cb181d','#99000d'];
-//var HEATMAP_COLOR = ['rgb(255,247,236)','rgb(254,232,200)','rgb(253,212,158)','rgb(253,187,132)','rgb(252,141,89)','rgb(239,101,72)','rgb(215,48,31)','rgb(179,0,0)','rgb(127,0,0)'].reverse();
-//var HEATMAP_COLOR = ['rgb(178,24,43)','rgb(214,96,77)','rgb(244,165,130)','rgb(253,219,199)','rgb(247,247,247)','rgb(209,229,240)','rgb(146,197,222)','rgb(67,147,195)','rgb(33,102,172)'].reverse();
-function GridAnalysis(theMap)
+var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
+var HEATMAP_OPACITY = 0.75;
+
+function GridAnalysis(theMap, svgExplore)
 {
+	// store reference to the map
 	this.map = theMap;
+	this.svgExplore = svgExplore;
+
+	// create a selection object
+	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2);
+	var yOffset = ClusterSelector.RECT_OFFSET;
+	var g = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
+	this.selector = new ClusterSelector(g, this);
 }
-var GRID_OPACITY = 0.6;
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
 {
@@ -29,9 +35,7 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 	var gridMin = { lat: Number.MAX_VALUE, lon: Number.MAX_VALUE };
 
 	// start with the top-left pixel in the grid and work your way to the bottom left
-	var yP = 0;
-	
-	//console.log("making: " + rows + " x " + cols + " grid.")
+	var yP = 0;	
 	for (var i=0; i<rows; i++) 
 	{
 		var newRow = [];
@@ -103,19 +107,10 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
-function testSymmetry(matrix) {
-
-	for (var i=0, len=matrix.length; i<len; i++) {
-		for (var j=0; j < i; j++) {
-			if (matrix[i][j] !== matrix[j][i])
-			{
-				console.log("** MATRIX not symmetric at " + i + " x " + j);
-				return false;
-			}
-		}
-	}
-	return true;
+GridAnalysis.prototype.resetView = function() {
+	this.selector.clearAll();
 }
+
 // send the analysis reuest as a JSON request
 GridAnalysis.prototype.sendRequest = function(_callback)
 {
@@ -129,6 +124,9 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			data: JSON.stringify(jsonRequest),
 			success: function(response, textStatus, xhr) 
 			{
+				// reset the view
+				gridAnalysis.resetView();
+
 				// parse the JSON reponse we received
 				jsonResponse = JSON.parse(response);
 				gridAnalysis.analysisResults = jsonResponse;
@@ -139,6 +137,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 
 				// make an index to translate form row,col to id
 				ij2index = [];
+				index2ij = [];
 
 				// loop through all IDs
 				for (var i=0, len = jsonResponse.tsIndex.length; i < len; i++) 
@@ -152,8 +151,10 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 						ij2index[r] = [];
 					}
 					ij2index[r][c] = i;
+					index2ij.push([r, c]);
 				}
 				gridAnalysis.ij2index = ij2index;
+				gridAnalysis.index2ij = index2ij;
 
 				// make a callback
 				if (callback) callback(jsonResponse);
@@ -165,6 +166,10 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 		})
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
+
+GridAnalysis.prototype.getGeoRect = function(c) {
+	return this.geoRectMap[ c[0] ][ c[1] ];
+}
 
 
 function GeoRect(_nValue, _timeseries, cell, _tL, _bR) {
@@ -204,12 +209,12 @@ function drawTimeseries(timeseries, group)
 {
 
 	// figure out the min/max of the time series
-	var extent = d3.extent(timeseries);
+	var extent = timeseries.extent();
 	var data = [];
-	for (var i=0, len=timeseries.length; i < len; i++) {
+	for (var i=0, len=timeseries.size(); i < len; i++) {
 		data.push({
 			x: i / (len-1),
-			y: timeseries[i] / extent[1]
+			y: timeseries.get(i) / extent[1]
 		});
 	}
 
@@ -271,13 +276,10 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		2,
 		this
 	);
-
 }
 
 GridAnalysis.prototype.hClustering = function()
 {
-	console.log("h clustering...");
-
 	// normalize matrix
 	var matrix = this.analysisResults.distanceMatrix;
 	var nMatrix = [];
@@ -304,7 +306,6 @@ GridAnalysis.prototype.hClustering = function()
 	}
 
 	var diffDistance = maxDistance - minDistance;
-	console.log("distances: " + maxDistance + ", " + minDistance)
 
 	for (var i=0, len=nMatrix.length; i<len; i++) 
 	{
@@ -322,7 +323,6 @@ GridAnalysis.prototype.hClustering = function()
 	dim -= GridAnalysis.MATRIX_ELEMENT_BRUSH;
 
 	SIMMAT_ELEMENT_SIZE = dim / nMatrix.length;
-	console.log("SimMatrix element size: " + SIMMAT_ELEMENT_SIZE);
 	SIMMAT_ELEMENT_BORDER = "none";
 	DENDOGRAM_NODE_HEIGHT = 5;
 		//simMatrix.getDendogramDepth() / (d3.select("#svgDendogram").attr("width") - 15);
@@ -363,7 +363,7 @@ GridAnalysis.prototype.hClustering = function()
 			// measure time
 			var endTime = new Date();
 			var processTime = (endTime.getTime() - startTime.getTime())/1000;
-			console.log("matrix rendering took: " + processTime.toFixed(1) + " seconds.");
+			console.log("Matrix rendering took: " + processTime.toFixed(1) + " seconds.");
 			onscreenCanvas.getContext("2d").drawImage(offscreenCanvas, 0, 0);
 			_callback(null);
 		});
@@ -374,8 +374,40 @@ GridAnalysis.prototype.hClustering = function()
 			function(cluster) { grid.unbrushCluster(cluster); }
 		);
 
+		// a callback when clusters are double clicked
+		simMatrix.setClusterDblClickCallback( function(cluster) {
+			grid.makeClusterSelection( cluster );
+		})
+
 	})(this.onscreenCanvas, this.offscreenCanvas, this.simMatrix, this)
-	console.log("done.");
+}
+
+GridAnalysis.prototype.makeClusterSelection = function(cluster) 
+{
+	// do we have this cluster registered
+	console.log("makeClusterSelection");
+
+	if (this.selector.isSelected(cluster.getID())) {
+		// do nothing
+		return;
+	}
+	else
+	{
+		var members = [];
+		for (var i=0, N=cluster.members.length; i<N; i++) 
+		{
+			var id = cluster.members[i];
+			var rc = this.index2ij[id];
+			console.log("\trc: " + rc);
+
+			members.push({
+				id: cluster.members[i],
+				timeseries: this.getGeoRect(rc).getTimeseries()
+			});
+		}
+		console.log("Selecting cluster " + cluster.getID() + ", with: " + members.length);
+		this.selector.newSelection(cluster, members);
+	}
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
@@ -393,12 +425,12 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 				.style("fill-opacity", function(d) {
 					var c = d.getCell();
 					var highlighted = hm.get(c[0] + "_" + c[1]);
-					return (highlighted ? GRID_OPACITY : 0.0);
+					return (highlighted ? HEATMAP_OPACITY : 0.0);
 				});
 		})(highlightMap, this);
 	}
 	else {
-		this.heatmapSelection.style("fill-opacity", GRID_OPACITY);
+		this.heatmapSelection.style("fill-opacity", HEATMAP_OPACITY);
 	}
 }
 
@@ -417,9 +449,19 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	var cols = this.analysisRequest.gridCols;
 
 	var geoRects = [];
+	var geoRectMap = [];
+
 	for (var i=0; i < rows; i++) 
 	{
-		if (!heatmap[i]) continue;
+		if (!heatmap[i]) 
+		{
+			continue;
+		}
+		else
+		{
+			geoRectMap[i] = [];
+		}
+
 		for (var j=0; j<cols; j++) 
 		{
 			if (heatmap[i][j]) 
@@ -429,17 +471,26 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 				var geoCoord = this.analysisRequest.grid[i][j]
 				var count = heatmap[i][j];
-				
-				geoRects.push(new GeoRect(
+				var _timeseries = timeseries[i][j] ? (new Timeseries( timeseries[i][j] )).normalize() : null;
+			
+				var cell = new GeoRect(
 					count,
-					timeseries[i][j],
+					_timeseries,
 					[i, j],
 					{ lat: geoCoord[0], lng: geoCoord[1] },
 					{ lat: geoCoord[2], lng: geoCoord[3] }
-				));
+				);
+
+				// add the geo rect to the map
+				geoRectMap[i][j] = cell;
+				geoRects.push( cell );
 			}
 		}
 	}
+
+	// register georects to this object
+	this.geoRectMap = geoRectMap;
+	this.geoRects = geoRects;
 
 	// produce color for the heatmap
 	var _logScale = d3.scale.log().domain([minValue+1, maxValue+1]).range([0, 1]);
@@ -452,7 +503,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup, grid) 
 	{
-		var selection = heatmapGroup.selectAll("path").data(geoRects).enter().append("path")
+		var selection = heatmapGroup.selectAll("path").data(grid.geoRects).enter().append("path")
 			.attr("id", function(d) {
 				var cell = d.getCell();
 				return "heatmap_cell_" + cell[0] + "_" + cell[1]; 
@@ -465,13 +516,13 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				return colorScale(logScale(d.nValue+1));
 			})
 			.style("fill-opacity", function(d) {
-				if (d.getValue() <= 1) return 0.0; else return GRID_OPACITY;
+				if (d.getValue() <= 1) return 0.0; else return HEATMAP_OPACITY;
 			})
 			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : ''})
 			.on("mouseenter", function(d, i) 
 			{
 				var ts = d.getTimeseries();
-				if (ts && ts.length > 1) 
+				if (ts && ts.size() > 1) 
 				{
 					var cell = d.getCell();
 					var mouse = d3.mouse(svg.node());
@@ -610,3 +661,37 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 		}, 200);
 	})(this, cluster);
 }
+
+// ============================
+// Helper functions
+// ============================
+function symmetrizeSimMatrix(matrix)
+{
+	var n = matrix.length;
+	for (var i = 0; i < n; i++) 
+	{
+		matrix[i].length = n;
+		matrix[i][i] = 0;
+		for (var j = i+1; j < n; j++) 
+		{
+			matrix[j][i] *= -1;
+			matrix[i][j] = matrix[j][i];
+		}
+	}
+	return matrix;
+}
+
+function testSymmetry(matrix) {
+
+	for (var i=0, len=matrix.length; i<len; i++) {
+		for (var j=0; j < i; j++) {
+			if (matrix[i][j] !== matrix[j][i])
+			{
+				console.error("** MATRIX not symmetric at " + i + " x " + j);
+				return false;
+			}
+		}
+	}
+	return true;
+}
+

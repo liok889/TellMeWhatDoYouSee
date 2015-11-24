@@ -199,7 +199,7 @@ module.exports = {
 
 var ALPHABET_SIZE = 4;
 var WORD_SIZE = 8;
-var WINDOW_SIZE = 88; //96;
+var WINDOW_SIZE = 40;//88; //96;
 var MAX_DEVIATION = 3;			// max deviation from standard deviation for each cell
 var MAX_LOG_STRESS = 1.75;
 
