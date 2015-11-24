@@ -4,17 +4,24 @@
  * ============================================
  */
 
-function Selection(svg, color, members, avgTimeseries)
+var SELECTION_SERIAL = 1;
+function Selection(color, members, avgTimeseries, selector)
 {
+	this.selectionID = SELECTION_SERIAL++;
 	this.members = members;
 	this.avgTimeseries = avgTimeseries;
+	this.parentSelector = selector;
+	this.color = color;
+}
 
+Selection.prototype.populateSelection = function(g)
+{
 	// create a group and rectangle
-	this.g = svg.append("g");
+	this.g = g;	
 	this.rect = this.g.append("rect")
 		.attr("width", ClusterSelector.RECT_W)
 		.attr("height", ClusterSelector.RECT_H)
-		.attr("fill", color)
+		.attr("fill", this.color || ClusterSelector.LAST_COLOR)
 		.attr("rx", 3.5)
 		.attr("ry", 3.5)
 		.attr("stroke", "");
@@ -32,23 +39,32 @@ function Selection(svg, color, members, avgTimeseries)
 		.attr("stroke-width", "1px")
 		.attr("fill", "none");
 
-	var imgH = ClusterSelector.RECT_H/2-4;
-	var imgX = ClusterSelector.RECT_W+ClusterSelector.RECT_PAD;
+	(function(thisSelection) 
+	{
 
-	this.g.append("image")
-		.attr("xlink:href", "assets/cross.png")
-		.attr("x", imgX)
-		.attr("y", 2)
-		.attr("width", imgH)
-		.attr("height", imgH);
+		var imgH = 1.7*ClusterSelector.RECT_H/4-4;
+		var imgX = ClusterSelector.RECT_W+ClusterSelector.RECT_PAD;
 
-	this.g.append("image")
-		.attr("xlink:href", "assets/show.png")
-		.attr("x", imgX)
-		.attr("y", 4 + imgH)
-		.attr("width", imgH)
-		.attr("height", imgH);
+		thisSelection.g.append("image")
+			.attr("xlink:href", "assets/cross.svg")
+			.attr("clas", "svgButton")
+			.attr("x", imgX)
+			.attr("y", 2)
+			.attr("width", imgH)
+			.attr("height", imgH)
+			.on("click", function() 
+			{
+				thisSelection.parentSelector.removeSelection(thisSelection);
+			});
 
+		thisSelection.g.append("image")
+			.attr("xlink:href", "assets/show.svg")
+			.attr("clas", "svgButton")
+			.attr("x", imgX)
+			.attr("y", 4 + imgH)
+			.attr("width", imgH)
+			.attr("height", imgH);
+	})(this, this.parentSelector)
 }
 
 Selection.prototype.remove = function() {
@@ -76,6 +92,46 @@ ClusterSelector.prototype.hasColors = function()
 ClusterSelector.prototype.isSelected = function(clusterID) 
 {
 	return this.selectionMap.get( clusterID );
+}
+
+ClusterSelector.prototype.removeSelection = function(selection)
+{
+	for (var i=0, N=this.selections.length; i<N; i++) {
+		if (this.selections[i] == selection) {
+			this.selections.splice(i, 1);
+			break;
+		}
+	}
+	if (selection.color) {
+		// return color to available pool of colors
+		ClusterSelector.SELECTION_COLORS.push(selection.color);
+	}
+	this.updateSelections();
+}
+
+ClusterSelector.prototype.updateSelections = function() {
+	var update = this.svg.selectAll("g.ClusterSelectionGroup").data(
+		this.selections, 
+		function(selection) { return selection.selectionID; }
+	);
+	
+	// enter
+	var enter = update.enter()
+		.append("g").attr("class", "ClusterSelectionGroup").attr("transform", "translate(0,900)")
+		.each(function(d, i) {
+			d.populateSelection(d3.select(this));
+		});
+
+	// update
+	update.transition().attr("transform", function(d, i) { 
+		return "translate(0," + (i*(ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_H)) + ")";
+	})
+
+	// exit
+	update.exit().transition().attr("transform", function(d) {
+		return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
+	});
+
 }
 
 ClusterSelector.prototype.newSelection = function(cluster, members)
@@ -107,18 +163,24 @@ ClusterSelector.prototype.newSelection = function(cluster, members)
 		color = ClusterSelector.LAST_COLOR;
 	}
 
+	/*
 	var yOffset = this.selections.length * (ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_H)
 	var g = this.svg.append("g")
 		.attr("transform", "translate(0,900)")
+	*/
 
 	// add to selection
-	var selection = new Selection(g, color, members, avgTimeseries);
+	var selection = new Selection(color, members, avgTimeseries, this);
 	this.selections.push( selection );
 	this.selectionMap.set( cluster.getID(), selection )
 
+	// update selections
+	this.updateSelections();
 	// pop up from the bottom
+	/*
 	g.transition()
 		.attr("transform", "translate(0," + yOffset + ")");
+	*/
 }
 
 ClusterSelector.prototype.clearAll = function() 
