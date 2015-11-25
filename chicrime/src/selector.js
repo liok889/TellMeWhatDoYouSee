@@ -14,6 +14,40 @@ function Selection(color, members, avgTimeseries, selector)
 	this.color = color;
 }
 
+Selection.prototype.getMembers = function() 
+{
+	return this.members;
+}
+
+Selection.prototype.updateMemberList = function(newMembers)
+{
+	if (newMembers) {
+		this.members = newMembers;
+		this.avgTimeseries = calcAvgTimeseries(newMembers);
+	}
+
+	var PAD = ClusterSelector.RECT_PAD;
+	var pathW = ClusterSelector.RECT_W - PAD*2;
+	var pathH = ClusterSelector.RECT_H - PAD*2;
+	var pathGenerator = this.avgTimeseries.getPathGenerator(pathW, pathH);
+
+	// append the path
+	if (!this.pathG) {
+		this.pathG = this.g.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
+		this.pathG.append("path")
+			.attr("class", "timeseriesSelection")
+			.attr("d", pathGenerator(this.avgTimeseries.getSeries()))
+			.attr("stroke", "black")
+			.attr("stroke-width", "1px")
+			.attr("fill", "none");
+	}
+	else
+	{
+		console.log("Updating timeseries shape...");
+		this.pathG.selectAll("path.timeseriesSelection").attr("d", pathGenerator(this.avgTimeseries.getSeries()));
+	}
+};
+
 Selection.prototype.populateSelection = function(g)
 {
 	// create a group and rectangle
@@ -26,19 +60,10 @@ Selection.prototype.populateSelection = function(g)
 		.attr("ry", 3.5)
 		.attr("stroke", "");
 
-	var PAD = ClusterSelector.RECT_PAD;
-	var pathW = ClusterSelector.RECT_W - PAD*2;
-	var pathH = ClusterSelector.RECT_H - PAD*2;
-	var pathGenerator = this.avgTimeseries.getPathGenerator(pathW, pathH);
+	// this will draw the average time series
+	this.updateMemberList();
 
-	// append the path
-	var pathG = this.g.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
-	pathG.append("path")
-		.attr("d", pathGenerator(this.avgTimeseries.getSeries()))
-		.attr("stroke", "black")
-		.attr("stroke-width", "1px")
-		.attr("fill", "none");
-
+	// add buttons
 	(function(thisSelection) 
 	{
 
@@ -67,8 +92,21 @@ Selection.prototype.populateSelection = function(g)
 	})(this, this.parentSelector)
 }
 
-Selection.prototype.remove = function() {
+var JIGGLE_FACTOR = 1.2;
+Selection.prototype.jiggle = function()
+{
+	(function(g, transform) 
+	{
+		var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;
+		var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
 
+		g.transition().duration(50)
+			.attr("transform", transform + ",scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+
+		setTimeout(function() {
+			g.transition().duration(100).attr("transform", transform);
+		}, 60);
+	})(this.g, this.g.attr("transform"))
 }
 
 function ClusterSelector(svg, grid)
@@ -89,11 +127,6 @@ ClusterSelector.prototype.hasColors = function()
 	return ClusterSelector.SELECTION_COLORS.length > 0;
 }
 
-ClusterSelector.prototype.isSelected = function(clusterID) 
-{
-	return this.selectionMap.get( clusterID );
-}
-
 ClusterSelector.prototype.removeSelection = function(selection)
 {
 	for (var i=0, N=this.selections.length; i<N; i++) {
@@ -102,7 +135,7 @@ ClusterSelector.prototype.removeSelection = function(selection)
 			break;
 		}
 	}
-	if (selection.color) {
+	if (selection.color && selection.color != ClusterSelector.LAST_COLOR) {
 		// return color to available pool of colors
 		ClusterSelector.SELECTION_COLORS.push(selection.color);
 	}
@@ -134,7 +167,115 @@ ClusterSelector.prototype.updateSelections = function() {
 
 }
 
-ClusterSelector.prototype.newSelection = function(cluster, members)
+ClusterSelector.prototype.newSelection = function(members)
+{
+	var modifiedSelections = [];
+	var _newMap = mapifyMemberList(members);
+
+	// check previous selections and see if we have overlapping members
+	// if we do, remove those members from the earlier selections
+	for (var i=0; i < this.selections.length; i++) 
+	{
+		var s = this.selections[i];
+		var sM = s.getMembers();
+		var _curMap = mapifyMemberList( sM );
+		console.log("sM.length: " + sM.length);
+
+		var ret = (function(curMap, newMap) 
+		{
+			var list = [];
+			var changed = false;
+			var completeOverlap = true;
+
+			curMap.forEach(function(key, value) 
+			{
+				if (!newMap.get(key)) 
+				{
+					list.push(value);
+					completeOverlap = false;
+				}
+				else
+				{
+					changed = true;
+				}
+			});
+
+			completeOverlap = completeOverlap && changed;
+
+			return {
+				fullOverlap: completeOverlap,
+				changed: changed,
+				memberList: list
+			};
+		})(_curMap, _newMap);
+
+		if (ret.fullOverlap && (sM.length == members.length)) 
+		{
+			s.jiggle();
+			return;
+		}
+		else if (ret.changed) 
+		{
+			if (ret.memberList.length > 0) 
+			{
+				modifiedSelections.push(s);
+				s.updateMemberList(ret.memberList);
+			}
+			else
+			{
+				// cluster is now empty, remove it
+				this.selections.splice(i, 1);
+				if (s.color && s.color != ClusterSelector.LAST_COLOR) 
+				{
+					// return color to available pool of colors
+					ClusterSelector.SELECTION_COLORS.push(s.color);
+				}
+				i--;
+			}
+		}
+	}
+
+	// average the time series
+	var avgTimeseries = calcAvgTimeseries(members);
+
+	// add a selection to the cluster group
+	var color = null;
+	if (ClusterSelector.SELECTION_COLORS.length > 0) {
+		color = ClusterSelector.SELECTION_COLORS.pop();
+	}
+	else {
+		color = ClusterSelector.LAST_COLOR;
+	}
+
+	// add to selection
+	var selection = new Selection(color, members, avgTimeseries, this);
+	this.selections.push( selection );
+
+	// update selections
+	this.updateSelections();
+}
+
+ClusterSelector.prototype.clearAll = function() 
+{
+	this.selections = [];
+	this.selectionMap = d3.map();
+	this.svg.selectAll("g").remove();
+	ClusterSelector.SELECTION_COLORS = [];
+	ClusterSelector.DEFAULT_COLORS.forEach(function(element) {
+		ClusterSelector.SELECTION_COLORS.push(element);
+	});
+}
+
+function mapifyMemberList(ar) 
+{
+	var m = d3.map();
+	for (var i=0, N=ar.length; i<N; i++) {
+		m.set(ar[i].id, ar[i]);
+	}
+	return m;
+}
+
+function calcAvgTimeseries(members)
 {
 	// average the time series
 	var avgTimeseries = new Timeseries();
@@ -150,48 +291,8 @@ ClusterSelector.prototype.newSelection = function(cluster, members)
 		// blend the time series
 		avgTimeseries.add( member.timeseries );
 	}
-
-	// normalize timeseries to get the average
 	avgTimeseries.normalize();
-
-	// add a selection to the cluster group
-	var color = null;
-	if (ClusterSelector.SELECTION_COLORS.length > 0) {
-		color = ClusterSelector.SELECTION_COLORS.pop();
-	}
-	else {
-		color = ClusterSelector.LAST_COLOR;
-	}
-
-	/*
-	var yOffset = this.selections.length * (ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_H)
-	var g = this.svg.append("g")
-		.attr("transform", "translate(0,900)")
-	*/
-
-	// add to selection
-	var selection = new Selection(color, members, avgTimeseries, this);
-	this.selections.push( selection );
-	this.selectionMap.set( cluster.getID(), selection )
-
-	// update selections
-	this.updateSelections();
-	// pop up from the bottom
-	/*
-	g.transition()
-		.attr("transform", "translate(0," + yOffset + ")");
-	*/
-}
-
-ClusterSelector.prototype.clearAll = function() 
-{
-	this.selections = [];
-	this.selectionMap = d3.map();
-	this.svg.selectAll("g").remove();
-	ClusterSelector.SELECTION_COLORS = [];
-	ClusterSelector.DEFAULT_COLORS.forEach(function(element) {
-		ClusterSelector.SELECTION_COLORS.push(element);
-	});
+	return avgTimeseries;
 }
 
 // constants

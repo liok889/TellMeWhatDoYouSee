@@ -384,30 +384,20 @@ GridAnalysis.prototype.hClustering = function()
 
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 
 {
-	// do we have this cluster registered
-	console.log("makeClusterSelection");
-
-	if (this.selector.isSelected(cluster.getID())) {
-		// do nothing
-		return;
-	}
-	else
+	var members = [];
+	for (var i=0, N=cluster.members.length; i<N; i++) 
 	{
-		var members = [];
-		for (var i=0, N=cluster.members.length; i<N; i++) 
-		{
-			var id = cluster.members[i];
-			var rc = this.index2ij[id];
-			console.log("\trc: " + rc);
+		var id = cluster.members[i];
+		var rc = this.index2ij[id];
+		var geoRect = this.getGeoRect(rc);
 
-			members.push({
-				id: cluster.members[i],
-				timeseries: this.getGeoRect(rc).getTimeseries()
-			});
-		}
-		console.log("Selecting cluster " + cluster.getID() + ", with: " + members.length);
-		this.selector.newSelection(cluster, members);
+		members.push({
+			id: cluster.members[i],
+			timeseries: geoRect.getTimeseries(),
+			geoRect: geoRect
+		});
 	}
+	this.selector.newSelection(members);
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)

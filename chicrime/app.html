@@ -161,7 +161,7 @@
 	<!-- user interface elements -->
 
 	<!-- exploration pane -->
-	<svg id="svgExplore" width="700" height="480" style="position: absolute; top: 20px; left: 580px; border: solid 1px #cccccc; visibility: true">
+	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 1px #cccccc; visibility: true">
 	</svg>
 
 	<!-- MDS pane -->
@@ -309,7 +309,7 @@
 			
 			// see different mapbox styles:
 			// https://www.mapbox.com/developers/api/maps/
-			theMap = L.mapbox.map('map', 'mapbox.dark', {fadeAnimation: true, inertia: false, zoomAnimation: false})
+			theMap = L.mapbox.map('map', 'mapbox.light', {fadeAnimation: true, inertia: false, zoomAnimation: false})
 				.setView([ 41.840920397579936, -87.67433166503906], 11);
 		
 			// get map pane (this will be the overlay layer)

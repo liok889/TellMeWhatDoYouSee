@@ -146,10 +146,13 @@ module.exports = {
 					for (var i = 0, len = docs.length; i < len; i++) 
 					{
 						var doc = docs[i];
-						var r = +doc._id.rowNum; if (query.cellOffset.lat < 0) r = query.gridRows - 1 + r;
-						var c = +doc._id.colNum; if (query.cellOffset.lon < 0) c = query.gridCols - 1 + c;
+						var r = +doc._id.rowNum; if (query.cellOffset.lat < 0) r = Math.max(0, query.gridRows -1 + r);
+						var c = +doc._id.colNum; if (query.cellOffset.lon < 0) c = Math.max(0, query.gridCols -1 + c);
 						var tIndex = doc._id.tIndex ? +doc._id.tIndex : 0;
 						
+						if (r < 0 || c < 0) {
+							console.log("Warning: negative grid indices: " + r + ", " + c + ", grid: " + query.gridRows + ", " + query.gridCols);
+						}
 						if (!data[r]) {
 							data[r] = [];
 							sums[r] = [];
