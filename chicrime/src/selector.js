@@ -119,26 +119,6 @@ Selection.prototype.populateSelection = function(g)
 
 var JIGGLE_FACTOR = 1.2;
 
-Selection.prototype.expand = function(expandFactor, duration)
-{
-	var xOffset = (1.0 - (expandFactor || JIGGLE_FACTOR))*ClusterSelector.RECT_W/2;
-	var yOffset = (1.0 - (expandFactor || JIGGLE_FACTOR))*ClusterSelector.RECT_H/2;
-	var transform = this.g.attr("transform");
-
-	this.g.transition().duration(duration || 50)
-		.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
-
-	// store original transform
-	this.originalTransform = transform;
-}
-
-Selection.prototype.deexpand = function(duration)
-{
-	this.g.transition().duration(duration || 100)
-		.attr("transform", this.originalTransform);
-	this.originalTransform = undefined;
-}
-
 Selection.prototype.jiggle = function()
 {
 	(function(g, transform) 
@@ -147,10 +127,10 @@ Selection.prototype.jiggle = function()
 		var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
 
 		g.transition().duration(50)
-			.attr("transform", transform + ",scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+			.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
 
 		setTimeout(function() {
-			g.transition().duration(100).attr("transform", transform);
+			g.transition().duration(60).attr("transform", transform);
 		}, 60);
 	})(this.g, this.g.attr("transform"))
 }
