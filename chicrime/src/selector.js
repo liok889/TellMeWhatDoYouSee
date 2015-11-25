@@ -43,7 +43,6 @@ Selection.prototype.updateMemberList = function(newMembers)
 	}
 	else
 	{
-		console.log("Updating timeseries shape...");
 		this.pathG.selectAll("path.timeseriesSelection").attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 };
@@ -120,6 +119,18 @@ function ClusterSelector(svg, grid)
 
 	// to initialize available set of colors
 	this.clearAll();
+
+	// color map
+	this.colorMap = d3.map();
+}
+
+ClusterSelector.prototype.setMDS = function(_mds) {
+	this.mds = _mds;
+}
+
+ClusterSelector.prototype.getColorMap = function()
+{
+	return this.colorMap;
 }
 
 ClusterSelector.prototype.hasColors = function()
@@ -129,12 +140,15 @@ ClusterSelector.prototype.hasColors = function()
 
 ClusterSelector.prototype.removeSelection = function(selection)
 {
-	for (var i=0, N=this.selections.length; i<N; i++) {
+	var before = this.selections.length;
+	for (var i=0, N=this.selections.length; i<N; i++) 
+	{
 		if (this.selections[i] == selection) {
 			this.selections.splice(i, 1);
 			break;
 		}
 	}
+
 	if (selection.color && selection.color != ClusterSelector.LAST_COLOR) {
 		// return color to available pool of colors
 		ClusterSelector.SELECTION_COLORS.push(selection.color);
@@ -142,7 +156,8 @@ ClusterSelector.prototype.removeSelection = function(selection)
 	this.updateSelections();
 }
 
-ClusterSelector.prototype.updateSelections = function() {
+ClusterSelector.prototype.updateSelections = function() 
+{
 	var update = this.svg.selectAll("g.ClusterSelectionGroup").data(
 		this.selections, 
 		function(selection) { return selection.selectionID; }
@@ -156,7 +171,7 @@ ClusterSelector.prototype.updateSelections = function() {
 		});
 
 	// update
-	update.transition().attr("transform", function(d, i) { 
+	update.transition().duration(350).attr("transform", function(d, i) { 
 		return "translate(0," + (i*(ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_H)) + ")";
 	})
 
@@ -165,6 +180,26 @@ ClusterSelector.prototype.updateSelections = function() {
 		return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
 	});
 
+	// build color map
+	var colorMap = d3.map();
+	for (var i=0, N=this.selections.length; i<N; i++) 
+	{
+		var selection = this.selections[i];
+		var members = selection.getMembers();
+		for (var j=0, K=members.length; j<K; j++) 
+		{
+			colorMap.set( members[j].id, selection.color );
+
+		}
+	}
+	this.colorMap = colorMap;
+
+	// if we have a reference to MDS, restore colors
+	if (this.mds) 
+	{
+		this.mds.setColorMap(this.colorMap);
+		this.mds.restoreColors();
+	}
 }
 
 ClusterSelector.prototype.newSelection = function(members)
@@ -179,7 +214,6 @@ ClusterSelector.prototype.newSelection = function(members)
 		var s = this.selections[i];
 		var sM = s.getMembers();
 		var _curMap = mapifyMemberList( sM );
-		console.log("sM.length: " + sM.length);
 
 		var ret = (function(curMap, newMap) 
 		{
@@ -264,6 +298,13 @@ ClusterSelector.prototype.clearAll = function()
 	ClusterSelector.DEFAULT_COLORS.forEach(function(element) {
 		ClusterSelector.SELECTION_COLORS.push(element);
 	});
+
+	// clear out existing color map
+	this.colorMap = d3.map();
+	if (this.mds) {
+		this.mds.setColorMap(this.colorMap);
+		this.mds.restoreColors();
+	}
 }
 
 function mapifyMemberList(ar) 
@@ -297,9 +338,10 @@ function calcAvgTimeseries(members)
 
 // constants
 // ==========
-ClusterSelector.DEFAULT_COLORS = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2'].reverse();
+//ClusterSelector.DEFAULT_COLORS = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2'].reverse();
+ClusterSelector.DEFAULT_COLORS = ['#8dd3c7', '#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9'].reverse();
 ClusterSelector.SELECTION_COLORS = null;
-ClusterSelector.LAST_COLOR = '#f2f2f2';
+ClusterSelector.LAST_COLOR = '#8dd3c7';
 ClusterSelector.RECT_W = 140;
 ClusterSelector.RECT_H = 37;
 ClusterSelector.RECT_PAD = 3;

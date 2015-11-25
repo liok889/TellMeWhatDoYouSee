@@ -24,7 +24,13 @@
 	<link href='src/infloader.css' rel='stylesheet' />
 	
 	<style>
-		body {font-family: helvetica; font-size: 10pt; font-weight: 100;}
+		body {
+			background-color: #eeeeee;
+			font-family: helvetica; font-size: 10pt; font-weight: 100;
+
+			/* prevent text selection */
+			-moz-user-select: none; -webkit-user-select: none; -ms-user-select:none; user-select:none;-o-user-select:none;
+		}
 		#map { margin: 20px 10px; position:absolute; top:0; bottom:0; width:550px; height: 820px; }
 
 		
@@ -50,9 +56,9 @@
 		}
 
 		.cityPath {
-			/*stroke: #FF3300;*/
-			stroke: #ffcc99;
-			stroke-width: 2px;
+			stroke: #FF3300;
+			/*stroke: #ffcc99;*/
+			stroke-width: 1.5px;
 			fill: #eeeeee;
 			fill-opacity: 0.0;
 		}
@@ -96,9 +102,12 @@
 		}
 
 		.mdsCircle {
-			fill: #cccccc;
+			fill: #999999;
 			stroke: #ffffff;
 			stroke-width: 0.5px;	
+		}
+		#svgMDS {
+			background-color: #d8d8d8;
 		}
 
 		.brush .extent {
@@ -165,7 +174,7 @@
 	</svg>
 
 	<!-- MDS pane -->
-	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc"></svg>
+	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc;"></svg>
 
 	<!-- similarity matrix and dendogram pane -->
 	<svg id="svgDendogram" width="150" height="320" style="position: absolute; top: 520px; left: 1090px; border: none"></svg>
@@ -183,13 +192,13 @@
 		var geodata = [];
 
 		// variables controllable by the UI
-		var GRID_LINE_COUNT = 40;
+		var GRID_LINE_COUNT = 30;
 		var GRID_OVERLAP = 0;
 		var SHOW_GRID = false;
 		var SHOW_COMMUNITIES = false;
 		var SHOW_HEATMAP = true;
 		var SHOW_CITY = true;
-		var MAP_OPACITY = 0.5;
+		var MAP_OPACITY = 1.0;
 		var YEAR_RANGE = [2014, 2014];
 
 		// analysis interface (which will connect to a nodejs back-end to run analyses on the database)

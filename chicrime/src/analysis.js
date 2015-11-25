@@ -254,6 +254,8 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 	// create a new MDS project object
 	if (!this.mds) {
 		this.mds = new MDS(svg);
+		this.mds.setColorMap( this.selector.getColorMap() );
+		this.selector.setMDS(this.mds);
 	}
 
 	(function(mds, matrix, tsIndex, dimensions, grid) 

@@ -81,6 +81,11 @@ function MDS(svg, width, height)
 	this.svg = svg;
 	this.w = width || +svg.attr("width");
 	this.h = height || +svg.attr("height");
+	this.colorMap = d3.map();
+}
+
+MDS.prototype.setColorMap = function(_colorMap) {
+	this.colorMap = _colorMap;
 }
 
 MDS.prototype.classic = function(distances, dimensions)
@@ -210,6 +215,43 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 	this.grid = gridAnalysis;
 }
 
+MDS.prototype.applyColorMap = function(_excludeMap)
+{
+	if (_excludeMap && Array.isArray(_excludeMap)) 
+	{
+		var theMap = d3.map();
+		for (var i=0, N=_excludeMap.length; i<N; i++) {
+			theMap.set( _excludeMap[i], true );
+		}
+		_excludeMap = theMap;
+	}
+
+	(function(colorMap, mdsPointSelection, excludeMap) {
+		mdsPointSelection.each(function(d) 
+		{
+			var id = d.getID();
+			var selectionColor = colorMap.get(id);
+			if (selectionColor && !excludeMap.get(id)) 
+			{
+				d3.select(this).style("fill", selectionColor);
+			}
+		});
+	})(this.colorMap, this.mdsPointSelection, _excludeMap || d3.map());
+}
+
+MDS.prototype.restoreColors = function()
+{
+	if (this.brushedSelection) 
+	{
+		this.brushmove(true);
+	}
+	else
+	{
+		this.mdsPointSelection.style("fill", "");
+		this.applyColorMap();
+	}	
+}
+
 MDS.prototype.brushPoints = function(ids)
 {
 	if (!ids || ids.length == 0) 
@@ -217,10 +259,7 @@ MDS.prototype.brushPoints = function(ids)
 		this.mdsPointSelection.style("fill", "").style("fill-opacity", "").style("stroke", "");
 
 		// restored brushed selection, if any
-		if (this.brushedSelection) 
-		{
-			this.brushmove(true);
-		}
+		this.restoreColors();
 		return [];
 	}
 	else
@@ -240,7 +279,8 @@ MDS.prototype.brushPoints = function(ids)
 		// remove highlight for all
 		this.mdsPointSelection.style("fill", "");
 
-		var pointSelection = (function(idMap, mdsPointSelection, brushed) {
+		// select points that are to be brushed
+		var pointSelection = (function(idMap, mdsPointSelection, brushedList, colorMap) {
 
 			var selection = mdsPointSelection.filter(function(d) 
 			{
@@ -251,20 +291,30 @@ MDS.prototype.brushPoints = function(ids)
 					// remove and put at top
 					var n = jQuery(this);
 					n.parent().append(n.detach());
-					brushed.push(d);
+					brushedList.push(d);
 					return true;
 				}
 				else {
+					var selectionColor = colorMap.get(id);
+					if (selectionColor) {
+						d3.select(this).style("fill", selectionColor);
+					}
 					return false;
 				}				
 			});
 			return selection;
-		})(_idMap, this.mdsPointSelection, _brushed);
+		})(_idMap, this.mdsPointSelection, _brushed, this.colorMap);
 
 		if (this.brushedSelection) {
 			this.brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR)
 		}
-		pointSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR).style("fill-opacity", "").style("stroke", "");
+
+		// points to be brushed
+		pointSelection
+			.style("fill", MDS_POINT_HIGHLIGHT_COLOR)
+			.style("fill-opacity", "")
+			.style("stroke", "");
+		
 		return _brushed;
 	}
 }
@@ -341,6 +391,11 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	// store a list of MDS points we brushed
 	this.brushedMDSPoints = brushedPoints;
 	this.brushedIDs = brushedIDs;
+
+	// apply selection color
+	this.applyColorMap(brushedIDs);
+
+	return brushedIDs;
 }
 
 // If the brush is empty, select all circles.
@@ -348,5 +403,6 @@ MDS.prototype.brushend = function()
 {
 	if (this.brush.empty()) {
 		this.svg.selectAll("circle").style("fill", "");		
+		this.applyColorMap();
 	} 
 }
