@@ -4,53 +4,9 @@
  * ===================================
  */
 
-// helper functions
-function pow(x, y)
-{
-	return Math.pow(x, y);
-}
-
-function calcRowMeans(M)
-{
-	var N = M.length;
-	var means = [];
-
-	for (var i=0; i<N; i++) {
-
-		var t=0;
-		for (var j=0; j<N; j++)
-		{
-			t += M[i][j]
-		}
-		means.push(t/N);
-	}
-	return means;
-}
-
-function calcColMeans(M)
-{
-	var N = M.length;
-	var means = [];
-
-	for (var i=0; i<N; i++) {
-
-		var t=0;
-		for (var j=0; j<N; j++)
-		{
-			t += M[j][i]
-		}
-		means.push(t/N);
-	}
-	return means;
-}
-
-function calcMean(A) {
-	var m = 0, N=A.length;
-	for (var i=0; i<N; i++) {
-		m+= A[i];
-	}
-	return m/N;
-}
+// constants
+var MDS_POINT_RADIUS = 4.5;
+var MDS_PADDING = 10;
 
 /* =======================
  * MDSPoint and MDS
@@ -126,10 +82,6 @@ MDS.prototype.classic = function(distances, dimensions)
 		return numeric.mul(row, eigenValues).splice(0, dimensions);
 	});
 }
-
-var MDS_POINT_RADIUS = 5.5;
-var MDS_POINT_HIGHLIGHT_COLOR = "#cc0000"
-var MDS_PADDING = 10;
 
 MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 {
@@ -208,6 +160,13 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 				});
 
 			thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
+
+			d3.select("#imgAddSelection")
+				.on("click", function() 
+				{
+					grid.makeBrushSelection(thisObject.brushedIDs);
+				});
+
 		}
 	})(gridAnalysis, group, points, xScale, yScale, this);
 	
@@ -306,12 +265,12 @@ MDS.prototype.brushPoints = function(ids)
 		})(_idMap, this.mdsPointSelection, _brushed, this.colorMap);
 
 		if (this.brushedSelection) {
-			this.brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR)
+			this.brushedSelection.style("fill", BRUSH_COLOR)
 		}
 
 		// points to be brushed
 		pointSelection
-			.style("fill", MDS_POINT_HIGHLIGHT_COLOR)
+			.style("fill", BRUSH_COLOR)
 			.style("fill-opacity", "")
 			.style("stroke", "");
 		
@@ -327,6 +286,7 @@ MDS.prototype.brushstart = function(_brushCell)
 		d3.select(this.brushCell).call(this.brush.clear());
 		this.brushCell = _brushCell;
 	}
+	d3.select("#imgAddSelection").style("visibility", "visible");
 }
 
 MDS.prototype.brushmove = function(hasNotMoved) 
@@ -374,7 +334,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	this.svg.selectAll("circle").style("fill", "");
 
 	// highlight only the brushed selection
-	brushedSelection.style("fill", MDS_POINT_HIGHLIGHT_COLOR);
+	brushedSelection.style("fill", BRUSH_COLOR);
 	
 	if (brushedSelection.size() > 0) 
 	{
@@ -404,5 +364,55 @@ MDS.prototype.brushend = function()
 	if (this.brush.empty()) {
 		this.svg.selectAll("circle").style("fill", "");		
 		this.applyColorMap();
-	} 
+		d3.select("#imgAddSelection").style("visibility", "hidden");
+	}
 }
+
+// helper functions
+function pow(x, y)
+{
+	return Math.pow(x, y);
+}
+
+function calcRowMeans(M)
+{
+	var N = M.length;
+	var means = [];
+
+	for (var i=0; i<N; i++) {
+
+		var t=0;
+		for (var j=0; j<N; j++)
+		{
+			t += M[i][j]
+		}
+		means.push(t/N);
+	}
+	return means;
+}
+
+function calcColMeans(M)
+{
+	var N = M.length;
+	var means = [];
+
+	for (var i=0; i<N; i++) {
+
+		var t=0;
+		for (var j=0; j<N; j++)
+		{
+			t += M[j][i]
+		}
+		means.push(t/N);
+	}
+	return means;
+}
+
+function calcMean(A) {
+	var m = 0, N=A.length;
+	for (var i=0; i<N; i++) {
+		m+= A[i];
+	}
+	return m/N;
+}
+

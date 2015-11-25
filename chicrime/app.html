@@ -174,7 +174,8 @@
 	</svg>
 
 	<!-- MDS pane -->
-	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc;"></svg>
+	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc; z-index:1"></svg>
+	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 525px; left: 585px; z-index: 2"></img>
 
 	<!-- similarity matrix and dendogram pane -->
 	<svg id="svgDendogram" width="150" height="320" style="position: absolute; top: 520px; left: 1090px; border: none"></svg>
@@ -200,6 +201,9 @@
 		var SHOW_CITY = true;
 		var MAP_OPACITY = 1.0;
 		var YEAR_RANGE = [2014, 2014];
+
+		// brush color
+		var BRUSH_COLOR = "#cc0000"
 
 		// analysis interface (which will connect to a nodejs back-end to run analyses on the database)
 		var gridAnalysis = null;

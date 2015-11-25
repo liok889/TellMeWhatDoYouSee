@@ -17,6 +17,14 @@ function GridAnalysis(theMap, svgExplore)
 	var yOffset = ClusterSelector.RECT_OFFSET;
 	var g = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(g, this);
+	(function(grid) {
+		grid.selector.setSelectionBrushCallback(function(ids) {
+			grid.brushSelectionMembers(ids);
+		});
+	})(this);
+
+	// add selection button
+	
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -402,13 +410,51 @@ GridAnalysis.prototype.makeClusterSelection = function(cluster)
 	this.selector.newSelection(members);
 }
 
+GridAnalysis.prototype.makeBrushSelection = function(ids)
+{
+	if (ids.length > 0)
+	{
+		var members = [];
+		for (var i=0, N=ids.length; i<N; i++) 
+		{
+			var id = ids[i];
+			var rc = this.index2ij[id];
+			var geoRect = this.getGeoRect(rc);
+
+			members.push({
+				id: id,
+				timeseries: geoRect.getTimeseries(),
+				geoRect: geoRect
+			});
+		}
+		this.selector.newSelection(members);
+	}
+}
+
+GridAnalysis.prototype.brushSelectionMembers = function(ids)
+{
+	// get cell ids for brushed cells
+	var cells = [];
+	for (var i=0, N=ids.length; i<N; i++) {
+		var cell = this.index2ij[ids[i]];
+		cells.push(cell);
+	}
+	this.highlightHeatmapCell(cells);
+
+	// matrix
+	this.brushMatrixElements(ids);
+
+	// MDS
+	this.mds.brushPoints(ids);
+}
+
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 {
 	if (cells && cells.length > 0) {
 
 		highlightMap = d3.map();
 		for (var i = 0, len = cells.length; i < len; i++) {
-			var c = cells[i].getCell();
+			var c = Array.isArray(cells[i]) ? cells[i] : cells[i].getCell();
 			highlightMap.set(c[0] + "_" + c[1], true);
 		}
 
@@ -428,7 +474,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 
 GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
 {
-	this.simMatrix.brushElements(brushedIDs, MDS_POINT_HIGHLIGHT_COLOR);
+	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
 }
 
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
@@ -522,6 +568,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 						.attr("id", "heatmapTimeseriesPopup")
 						.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
 						drawTimeseries(d.getTimeseries(), g);
+					grid.brushCellOut = undefined;
 					grid.brushCells([ cell ]);
 				}
 
@@ -534,7 +581,12 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 			.on("mouseout", function() {
 				d3.select("#heatmapTimeseriesPopup").remove();
 				d3.select(this).attr("class", "");
-				grid.brushCells([]);
+				grid.brushCellOut = true;
+				setTimeout(function() {
+					if (grid.brushCellOut) {
+						grid.brushCells([]);
+					}
+				}, 150);
 			});
 		grid.heatmapSelection = selection;
 
@@ -561,7 +613,7 @@ GridAnalysis.prototype.brushCells = function(cells)
 	}
 
 	// brush similarity matrix as well
-	this.simMatrix.brushElements(brushedIDs, MDS_POINT_HIGHLIGHT_COLOR);
+	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
 
 	// brush MDS plot
 	this.mds.brushPoints(brushedIDs);
@@ -612,7 +664,7 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 	}
 
 	// brush dendogram
-	this.simMatrix.highlightCluster(cluster, MDS_POINT_HIGHLIGHT_COLOR);
+	this.simMatrix.highlightCluster(cluster, BRUSH_COLOR);
 
 	// brush the MDS points and then the heatmap
 	this.highlightHeatmapCell(

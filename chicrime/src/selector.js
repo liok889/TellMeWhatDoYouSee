@@ -33,7 +33,7 @@ Selection.prototype.updateMemberList = function(newMembers)
 
 	// append the path
 	if (!this.pathG) {
-		this.pathG = this.g.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
+		this.pathG = this.content.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
 		this.pathG.append("path")
 			.attr("class", "timeseriesSelection")
 			.attr("d", pathGenerator(this.avgTimeseries.getSeries()))
@@ -50,8 +50,9 @@ Selection.prototype.updateMemberList = function(newMembers)
 Selection.prototype.populateSelection = function(g)
 {
 	// create a group and rectangle
-	this.g = g;	
-	this.rect = this.g.append("rect")
+	this.g = g;
+	this.content = g.append("g");
+	this.rect = this.content.append("rect")
 		.attr("width", ClusterSelector.RECT_W)
 		.attr("height", ClusterSelector.RECT_H)
 		.attr("fill", this.color || ClusterSelector.LAST_COLOR)
@@ -88,10 +89,56 @@ Selection.prototype.populateSelection = function(g)
 			.attr("y", 4 + imgH)
 			.attr("width", imgH)
 			.attr("height", imgH);
-	})(this, this.parentSelector)
+
+		thisSelection.content
+			.on("mouseover", function() 
+			{
+				thisSelection.rect
+					.style("stroke", BRUSH_COLOR)
+					.style("stroke-width", "2px");
+				thisSelection.parentSelector.brushOut = undefined;
+				thisSelection.parentSelector.brushMembers(thisSelection);
+
+			})
+			.on("mouseout", function() 
+			{
+				thisSelection.rect
+					.style("stroke", "")
+					.style("stroke-width", "");
+				thisSelection.parentSelector.brushOut = true;
+
+				setTimeout(function() {
+					if (thisSelection.parentSelector.brushOut) {
+						thisSelection.parentSelector.brushMembers();
+					}
+				}, 150);
+			});
+
+	})(this)
 }
 
 var JIGGLE_FACTOR = 1.2;
+
+Selection.prototype.expand = function(expandFactor, duration)
+{
+	var xOffset = (1.0 - (expandFactor || JIGGLE_FACTOR))*ClusterSelector.RECT_W/2;
+	var yOffset = (1.0 - (expandFactor || JIGGLE_FACTOR))*ClusterSelector.RECT_H/2;
+	var transform = this.g.attr("transform");
+
+	this.g.transition().duration(duration || 50)
+		.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+
+	// store original transform
+	this.originalTransform = transform;
+}
+
+Selection.prototype.deexpand = function(duration)
+{
+	this.g.transition().duration(duration || 100)
+		.attr("transform", this.originalTransform);
+	this.originalTransform = undefined;
+}
+
 Selection.prototype.jiggle = function()
 {
 	(function(g, transform) 
@@ -108,6 +155,11 @@ Selection.prototype.jiggle = function()
 	})(this.g, this.g.attr("transform"))
 }
 
+
+/* ======================================
+ * ClusterSelector
+ * ======================================
+ */
 function ClusterSelector(svg, grid)
 {
 	// initialize to empty selections
@@ -307,6 +359,24 @@ ClusterSelector.prototype.clearAll = function()
 	}
 }
 
+ClusterSelector.prototype.setSelectionBrushCallback = function(callback) {
+	this.selectionBrushCallback = callback;
+}
+
+ClusterSelector.prototype.brushMembers = function(selection)
+{
+	if (this.selectionBrushCallback)
+	{
+		var ids = [];
+		var members = selection ? selection.getMembers() : [];
+		for (var i=0, N=members.length; i<N; i++) 
+		{
+			ids.push(members[i].id);
+		}
+		this.selectionBrushCallback(ids);
+	}
+}
+
 function mapifyMemberList(ar) 
 {
 	var m = d3.map();
@@ -339,7 +409,7 @@ function calcAvgTimeseries(members)
 // constants
 // ==========
 //ClusterSelector.DEFAULT_COLORS = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2'].reverse();
-ClusterSelector.DEFAULT_COLORS = ['#8dd3c7', '#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9'].reverse();
+ClusterSelector.DEFAULT_COLORS = ['#fb8072','#80b1d3','#fdb462','#8dd3c7', '#bebada','#b3de69','#fccde5','#d9d9d9'].reverse();
 ClusterSelector.SELECTION_COLORS = null;
 ClusterSelector.LAST_COLOR = '#8dd3c7';
 ClusterSelector.RECT_W = 140;
