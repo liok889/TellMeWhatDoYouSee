@@ -16,6 +16,7 @@ function SimilarityMatrix(_svg, _floatingLenses)
 	this.matrixVisibility = true;
 	this.dendogramVisibility = true;
 	this.translateMatrix = false;
+	this.fitDendogramToSVG = true;
 }
 
 SimilarityMatrix.prototype.drawToCanvas = function(canvas, maxElements, fullMatrix)
@@ -758,8 +759,16 @@ SimilarityMatrix.prototype.drawMatrix = function()
 			this.dendogramGroup.remove();
 			this.dendogramGroup = undefined;
 		}
+
+		if (this.fitDendogramToSVG && this.svg) 
+		{
+			var svg = d3.select(getSVG( this.svg.node() ));
+			var w = +svg.attr("width");
+			DENDOGRAM_NODE_HEIGHT = w / (this.clusters.dendogram.depth + 1);
+		}
+		var xOffset = -1 * (this.clusters.dendogram.depth + .5) * DENDOGRAM_NODE_HEIGHT;
 		this.dendogramGroup = this.g.append("g")
-			.attr("transform", "translate(" + ((-this.clusters.dendogram.depth-.5)*DENDOGRAM_NODE_HEIGHT) + ",0)");
+			.attr("transform", "translate(" + xOffset + ",0)");
 		this.drawDendogram(this.clusters, this.dendogramLimit)[0];
 	}
 }
