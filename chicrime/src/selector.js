@@ -19,6 +19,14 @@ Selection.prototype.getMembers = function()
 	return this.members;
 }
 
+Selection.prototype.getTimeseries = function() {
+	return this.avgTimeseries;
+}
+
+Selection.prototype.getColor = function() {
+	return this.color;
+}
+
 Selection.prototype.updateMemberList = function(newMembers)
 {
 	if (newMembers) {
@@ -26,10 +34,12 @@ Selection.prototype.updateMemberList = function(newMembers)
 		this.avgTimeseries = calcAvgTimeseries(newMembers);
 	}
 
+	var pathGenerator = this.avgTimeseries.getPathGenerator(
+		ClusterSelector.RECT_W, 
+		ClusterSelector.RECT_H,
+		ClusterSelector.RECT_PAD		
+	);
 	var PAD = ClusterSelector.RECT_PAD;
-	var pathW = ClusterSelector.RECT_W - PAD*2;
-	var pathH = ClusterSelector.RECT_H - PAD*2;
-	var pathGenerator = this.avgTimeseries.getPathGenerator(pathW, pathH);
 
 	// append the path
 	if (!this.pathG) {
@@ -117,10 +127,10 @@ Selection.prototype.populateSelection = function(g)
 	})(this)
 }
 
-var JIGGLE_FACTOR = 1.2;
 
 Selection.prototype.jiggle = function()
 {
+	var JIGGLE_FACTOR = 1.2;
 	(function(g, transform) 
 	{
 		var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;

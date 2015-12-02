@@ -1,9 +1,23 @@
+/* --------------------------------------------
+ * Similarity Matrix
+ * sim_matrix.js
+ * ============================================
+ */
 var SIMMAT_ELEMENT_SIZE = 20;
 var SIMMAT_ELEMENT_BORDER = "#eeeeee";
-//var MATRIX_COLOR_SCALE = ['rgb(215,48,39)','rgb(252,141,89)','rgb(254,224,144)','rgb(255,255,191)','rgb(224,243,248)','rgb(145,191,219)','rgb(69,117,180)'].reverse();
-var MATRIX_COLOR_SCALE = ['#b2182b','#ef8a62','#fddbc7','#ffffff','#e0e0e0','#999999','#4d4d4d'].reverse();
 var DENDOGRAM_NODE_HEIGHT = SIMMAT_ELEMENT_SIZE/2;
 var DENDOGRAM_COLOR = "#959595";
+
+var MATRIX_COLOR_SCALE = 
+	
+	// green to red
+	//['#a50026','#d73027','#f46d43','#fdae61','#fee08b','#ffffbf','#d9ef8b','#a6d96a','#66bd63','#1a9850','#006837'].reverse();
+
+	// black to white
+	//['#f7f7f7','#d9d9d9','#bdbdbd','#969696','#737373','#525252','#252525'].reverse();
+
+	// grey to red
+	['#b2182b','#ef8a62','#fddbc7','#ffffff','#e0e0e0','#999999','#4d4d4d'].reverse();
 
 function SimilarityMatrix(_svg, _floatingLenses)
 {

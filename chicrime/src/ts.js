@@ -81,6 +81,32 @@ Timeseries.prototype.add = function(anotherSeries)
 	}
 }
 
+Timeseries.prototype.subtract = function(anotherSeries) 
+{
+	// make sure the two series have equal lengths
+	if (this.series.length != anotherSeries.size()) {
+		console.error("WARNING: Timeseries.add() mismatch in length");
+		return;
+	}
+
+	for (var i=0, N=this.series.length; i<N; i++) {
+		this.series[i] -= anotherSeries.series[i];
+	}
+}
+
+Timeseries.prototype.clone = function()
+{
+	var clone = new Timeseries();
+	clone.series = new Array(this.series.length);
+	for (var i=0, N=this.series.length; i<N; i++)
+	{
+		clone.series[i] = this.series[i];
+	}
+	clone.seriesMax = this.seriesMax;
+	return clone;
+}
+
+
 Timeseries.prototype.normalize = function()
 {
 	// normalize
@@ -93,7 +119,7 @@ Timeseries.prototype.normalize = function()
 	return this;
 }
 
-Timeseries.prototype.getPathGenerator = function(width, height) 
+Timeseries.prototype.getPathGenerator = function(width, height, pad) 
 {
 	return (function(W, H, N, seriesMax) 
 	{
@@ -101,6 +127,6 @@ Timeseries.prototype.getPathGenerator = function(width, height)
 			.x(function(d, i) { return i/(N-1)           * W; })
 			.y(function(d, i) { return (1.0-d/seriesMax) * H; });
 	
-	})(width, height, this.series.length, this.figureMax());
+	})(width - (pad ? 2*pad : 0), height - (pad ? 2*pad : 0), this.series.length, this.figureMax());
 
 }
