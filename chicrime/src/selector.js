@@ -58,9 +58,9 @@ Selection.prototype.updateMemberList = function(newMembers)
 	}
 };
 
-Selection.prototype.getContent = function()
+Selection.prototype.getContentContainer = function()
 {
-	return this.content.html()
+	return this.content;
 }
 
 Selection.prototype.populateSelection = function(g)
@@ -130,18 +130,21 @@ Selection.prototype.populateSelection = function(g)
 				}, 150);
 			})
 			.on("mousedown", function() {
+				thisSelection.parentSelector.beginDragSelection(thisSelection);
+				
 				// register mousemove callback on window so we can continue to track dragging
-				d3.select(window).on("mousemove", function() {
+				d3.select(window).on("mousemove.selectionDrag", function() {
 					thisSelection.parentSelector.dragSelection(thisSelection);
 				})
+				d3.select(window).on("mouseup.selectionDrag", function() {
 
-				thisSelection.parentSelector.beginDragSelection(thisSelection);
-			})
-			.on("mouseup", function() {
-				// remove mousemove callback from window
-				d3.select(window).on("mousemove", null);
+					// unregister event handlers
+					d3.select(window).on("mouseup.selectionDrag", null);
+					d3.select(window).on("mousemove.selectionDrag", null);
 
-				thisSelection.parentSelector.endDragSelection(thisSelection);
+					thisSelection.parentSelector.endDragSelection(thisSelection);
+
+				})
 			});
 
 	})(this)
@@ -185,7 +188,7 @@ function ClusterSelector(svg, grid, _offset)
 	this.colorMap = d3.map();
 
 	// store transform
-	this.offset = _offset;
+	this.selectionWidgetOffset = _offset;
 }
 
 ClusterSelector.prototype.setMDS = function(_mds) {
@@ -267,8 +270,8 @@ ClusterSelector.prototype.updateSelections = function()
 
 ClusterSelector.prototype.getSelectionOffset = function(selection)
 {
-	var I = this.getSelectionI(selection);
-	if (!I) {
+	var I = this.getSelectionIndex(selection);
+	if (I === null) {
 		return null;
 	}
 	else
@@ -277,7 +280,7 @@ ClusterSelector.prototype.getSelectionOffset = function(selection)
 	}
 }
 
-ClusterSelector.prototype.getSelectionI = function(selection)
+ClusterSelector.prototype.getSelectionIndex = function(selection)
 {
 	for (var i=0, N=this.selections.length; i<N; i++) {
 		if (this.selections[i] == selection) {
@@ -411,48 +414,51 @@ ClusterSelector.prototype.brushMembers = function(selection)
 
 ClusterSelector.prototype.beginDragSelection = function(selection)
 {
-	this.dragged = selection;
-	this.draggedCopy = undefined;
-
+	this.draggedSelection = selection;
 }
 
 ClusterSelector.prototype.dragSelection = function(selection)
 {
-	var mouseSVG = d3.mouse(this.avg.node());
+	var mouseSVG = d3.mouse(this.svg.node());
+	var coord = [];
+
 	if (!this.dragG)
 	{
-		var container = selection.getContainer();
+		var container = selection.getContentContainer();
 		this.dragG = d3.select(this.svg.node().parentElement).append("g")
 			.attr("class", "exploreDrag");
 		this.dragG.html( container.html() );
 
 		var selectionOffset = this.getSelectionOffset(selection);
+		console.log("selectionOffset: " + selectionOffset);
 		var mouseInRect = d3.mouse(container.node());
-		var coord = [
-			mouseSVG[0] + selectionOffset[0] - mouseInRect[0],
-			mouseSVG[1] + selectionOffset[1] - mouseInRect[1],	
+		coord = [
+			this.selectionWidgetOffset[0] + mouseSVG[0] - mouseInRect[0],
+			this.selectionWidgetOffset[1] + mouseSVG[1] - mouseInRect[1],	
 		];
 
 		this.dragGCoord0 = mouseSVG;
 		this.dragGCoord1 = coord;
-
-		this.dragG.attr("transform", "translate(" + coord[0] + "," + coord[1]);
 	}
 	else
 	{
-		var coord = [
-			this.dragGCoord1[0] + this.dragGCoord0[0] - mouseSVG[0],
-			this.dragGCoord1[1] + this.dragGCoord0[1] - mouseSVG[1]
+		coord = [
+			this.dragGCoord1[0] - this.dragGCoord0[0] + mouseSVG[0],
+			this.dragGCoord1[1] - this.dragGCoord0[1] + mouseSVG[1]
 		];
 
-		this.dragG.attr("transform", "translate(" + coord[0] + "," + coord[1]);
 	}
+	
+	// drag the selection
+	this.dragG.attr("transform", "translate(" + coord[0] + "," + coord[1] + ")");
+
 }
 
 ClusterSelector.prototype.endDragSelection = function(selection)
 {
 	this.dragG.remove();
 	this.dragG = undefined;
+	this.draggedSelection = undefined;
 }
 
 function mapifyMemberList(ar) 
