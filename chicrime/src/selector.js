@@ -220,6 +220,10 @@ ClusterSelector.prototype.removeSelection = function(selection)
 		ClusterSelector.SELECTION_COLORS.push(selection.color);
 	}
 	this.updateSelections();
+
+	if (this.removeSelectionCallback) {
+		this.removeSelectionCallback(selection);
+	}
 }
 
 ClusterSelector.prototype.updateSelections = function() 
@@ -476,6 +480,10 @@ ClusterSelector.prototype.setDragCallback = function(drag, endDrag)
 {
 	this.dragCallback = drag;
 	this.endDragCallback = endDrag;
+}
+
+ClusterSelector.prototype.setRemoveSelectionCallback = function(callback) {
+	this.removeSelectionCallback = callback;
 }
 
 function mapifyMemberList(ar) 

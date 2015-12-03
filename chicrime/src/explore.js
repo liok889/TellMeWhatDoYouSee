@@ -50,17 +50,20 @@ Signal.prototype.enter = function(group)
 
 Signal.prototype.exit =function()
 {
-	var _midPathGenerator = this.selection.getTimeseries().getPathGenerator(
+	var _midPathGenerator = this.getSelection().getTimeseries().getPathGenerator(
 		SIGNAL_W,
 		SIGNAL_H,
 		SIGNAL_PAD,
 		undefined,
-		SIGNAL_H - 2*SIGNAL_PAD
+		0.5 * (SIGNAL_H - 2*SIGNAL_PAD)
 	);
 
-	(function(signal, midPathGenerator) {
-		signal.path.transition().duration(3000)
-			.attr("d", midPathGenerator(signal.getSelection().getTimeseries()))
+
+	(function(signal, midPathGenerator) 
+	{
+		var series = signal.getSelection().getTimeseries().getSeries();
+		signal.path.transition().duration(300)
+			.attr("d", midPathGenerator(series))
 			.each("end", function() 
 			{
 				signal.getGroup().remove();
@@ -317,6 +320,12 @@ Explore.prototype.endDragSelection = function(selection)
 	}
 }
 
+Explore.prototype.removeSelection = function(selection) {
+	// remove selection from all signals
+	for (var i=0, N=this.signalList.length; i<N; i++){
+		this.signalList[i].removeSignal(selection);
+	}
+}
 
 Explore.COLS = 1;
 Explore.ROWS = 2;

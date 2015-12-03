@@ -38,6 +38,12 @@ function GridAnalysis(theMap, svgExplore)
 				grid.explore.endDragSelection(selection);
 			}
 		);
+
+		grid.selector.setRemoveSelectionCallback(
+			function(selection) {
+				grid.explore.removeSelection(selection);
+			}
+		);
 	})(this);
 
 

@@ -130,7 +130,7 @@ Timeseries.prototype.getPathGenerator = function(width, height, pad, constX, con
 {
 	return (function(W, H, N, seriesMax, X, Y) 
 	{
-		return pathGenerator = d3.svg.line()
+		return d3.svg.line()
 			.x(X || function(d, i) { return i/(N-1)           * W; })
 			.y(Y || function(d, i) { return (1.0-d/seriesMax) * H; });
 	
