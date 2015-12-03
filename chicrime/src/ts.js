@@ -68,7 +68,7 @@ Timeseries.prototype.initEmpty = function(N) {
 	this.series = series;
 }
 
-Timeseries.prototype.add = function(anotherSeries) 
+Timeseries.prototype.add = function(anotherSeries, scalar) 
 {
 	// make sure the two series have equal lengths
 	if (this.series.length != anotherSeries.size()) {
@@ -77,20 +77,22 @@ Timeseries.prototype.add = function(anotherSeries)
 	}
 
 	for (var i=0, N=this.series.length; i<N; i++) {
-		this.series[i] += anotherSeries.series[i];
+		this.series[i] += (scalar ? scalar : 1.0) * anotherSeries.series[i];
 	}
 }
 
 Timeseries.prototype.subtract = function(anotherSeries) 
 {
-	// make sure the two series have equal lengths
-	if (this.series.length != anotherSeries.size()) {
-		console.error("WARNING: Timeseries.add() mismatch in length");
-		return;
-	}
+	this.add(anotherSeries, -1.0);
+}
 
+Timeseries.prototype.multiply = function(scalar)
+{
 	for (var i=0, N=this.series.length; i<N; i++) {
-		this.series[i] -= anotherSeries.series[i];
+		this.series[i] *= scalar;
+	}
+	if (this.seriesMax) {
+		this.seriesMax *= scalar;
 	}
 }
 

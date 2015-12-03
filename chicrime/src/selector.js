@@ -182,7 +182,6 @@ ClusterSelector.prototype.hasColors = function()
 
 ClusterSelector.prototype.removeSelection = function(selection)
 {
-	var before = this.selections.length;
 	for (var i=0, N=this.selections.length; i<N; i++) 
 	{
 		if (this.selections[i] == selection) {

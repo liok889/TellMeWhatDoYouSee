@@ -1,5 +1,5 @@
 /* --------------------------------------------
- * Explore Pane
+ * Exploration Pane
  * explore.js
  * ============================================
  */
@@ -8,42 +8,55 @@ var SIGNAL_INDIVIDUAL = 0;
 var SIGNAL_AVG = 1;
 var SIGNAL_DIFF = 2;
 
-function SignalVis(g, w, h)
+// ==================================
+// Signal
+// ==================================
+function Signal(selection)
 {
-	// dimensions of the signal visualizer
-	this.w = w;
-	this.h = h;
-	this.group = g;
+	this.selection = selection;
+}
+
+Signal.prototype.getSelection = function()
+{
+	return this.selection;
+}
+
+Signal.prototype.getGroup = function()
+{
+	return this.group;
+}
+
+Signal.prototype.enter = function(group)
+{
+	this.group = group;
+	var ret = generateSignalPath(
+		this.group,
+		this.selection.getTimeseries(),
+		this.selection.getColor()
+	);
+
+	this.pathG = ret.pathG;
+	this.path = ret.path;
+	this.pathGenerator = ret.pathGenerator;
+}
+
+Signal.prototype.exit =function()
+{
+	var _midPathGenerator = jQuery.extend(true, {}, this.pathGenerator);
+	_midPathGenerator.y(function(d, i) { return 0.5 * (SignalVis.SIGNAL_H - 2*SignalVis.SIGNAL_PAD); });
 	
-	this.selections = [];
-	this.signals = [];
+	(function(signal, midPathGenerator) {
 
-	this.sumSeries = new Timeseries();
-	this.avgSeries = new Timeseries();
-}
-
-SignalVis.prototype.addSelection = function(selection)
-{
-	// make sure selection does not already exist
-	var exists = false;
-	for (var i=0, N=this.selections.length; i++) 
-	{
-		var = this.selections[i];
-		if (selection == s) 
+		signal.path.transition()
+		.attr("d", midPathGenerator(this.selection.getSeries()))
+		.each("end", function() 
 		{
-			this.jiggleSignal(signal[i].g);
-			exists = true;
-			break;
-		}
-	}
-
-	if (!exists) 
-	{
-		var newSignal = this.generatePathSignal( seleciton.getTimeseries(), selection.getColor() );
-	}
+			signal.getGroup().remove();
+		});
+	})(this, _midPathGenerator);
 }
 
-SignalVis.prototype.generateSignalPath = function(timeseries, color)
+function generateSignalPath(group, timeseries, color)
 {
 	var PAD = SignalVis.SIGNAL_PAD;
 	var pathGenerator = timeseries.getPathGenerator(
@@ -59,11 +72,11 @@ SignalVis.prototype.generateSignalPath = function(timeseries, color)
 
 
 	// make a pth 
-	var pathG = this.g.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
+	var pathG = group.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
 	var path = pathG.append("path")
 		.attr("class", "timeseriesPlot")
 		.attr("d", baselinePathGenerator(timeseries.getSeries()))
-		.attr("stroke", color || "black");
+		.attr("stroke", color || "black")
 		.attr("stroke-width", "3px")
 		.attr("fill", "none");
 	
@@ -71,17 +84,107 @@ SignalVis.prototype.generateSignalPath = function(timeseries, color)
 		.attr("d", pathGenerator(timeseries.getSeries()));
 
 	return {
-		group: pathG,
+		pathG: pathG,
 		path: path,
-		pathGenerator: pathGenerator,
-		timeseries: timeseries
+		pathGenerator: pathGenerator
 	};
-
 }
 
-SignalVis.prototype.updateSelection = function()
-{
 
+// ==================================
+// SignalVis
+// ==================================
+function SignalVis(g)
+{
+	// group
+	this.group = g;
+
+	// add a rectangle to this group
+	this.bgRect = g.append("rect")
+		.attr("width", SignalVis.SIGNAL_W)
+		.attr("height". SignalVis.SIGNAL_H)
+		.attr("class", "signalBox");
+	
+	// we'll store all signals here
+	this.signals = [];
+
+	// maintain a running sum and average time series
+	this.sumSeries = new Timeseries();
+	this.avgSeries = new Timeseries();
+}
+
+SignalVis.prototype.addSignal = function(selection)
+{
+	// make sure selection does not already exist
+	var exists = false;
+	for (var i=0, N=this.signals.length; i<N; i++) 
+	{
+		var s = this.signals[i].getSelection;
+		if (selection == s) 
+		{
+			this.jiggleSignal(signals[i].getGroup());
+			exists = true;
+			break;
+		}
+	}
+
+	if (!exists) 
+	{
+		var newSignal = new Signal(selection);
+		this.signals.push(newSignal);
+		this.updateSignals();
+	}
+}
+
+SignalVis.prototype.removeSignal = function(selection)
+{
+	var update = false;
+
+	for (var i=0, N=this.signals.length; i<N; i++) 
+	{
+		if (this.signals[i].getSelection() == selection) {
+			this.signals.splice(i, 1);
+			update = true;
+			break;
+		}
+	}
+
+	if (update) {
+		this.updateSignals();
+	}
+}
+
+SignalVis.prototype.updateSignals = function()
+{
+	// bind to groups
+	var update = this.group.selectAll("g.signalGroup").data(
+		this.signals, 
+		function(d) { return d.getSelection().selecitonID }
+	);
+	
+	// deal with enters
+	var enter = update.enter().append("g")
+		.attr("class", "signalGroup")
+		.each(function(signal) {
+			signal.enter(d3.select(this));
+		});
+
+	// keep track of times series
+	(function(sumSeries, _enter, _exit) 
+	{
+		_enter.each(function(signal) {
+			sumSeries.add(signal.getSelection().getTimeseries())
+		});
+
+		_exit.each(function(signal) {
+			sumSeries.subtract(signal.getSelection().getTimeseries());
+		});
+	})(this.sumSeries, enter, exit);
+
+	// exits the graphics
+	var exit = update.exit().each(function(signal) {
+		signal.exit();
+	});
 }
 
 SignalVis.prototype.jiggleSignal = function(_g)
@@ -103,11 +206,53 @@ SignalVis.prototype.jiggleSignal = function(_g)
 
 // constants
 // ==========
-SignalVis.SIGNAL_PAD = 10;
+SignalVis.SIGNAL_SEPARATION = 15;
+SignalVis.SIGNAL_PAD = 7;
 SignalVis.SIGNAL_W = 400;
 SignalVis.SIGNAL_H = 150;
 
+
+// ==================================
+// Explore
+// ==================================
 function Explore(svg)
 {
+	this.svg = svg;
+	this.signalMultiples = [];
 
+	var yOffset = SignalVis.SIGNAL_SEPARATION;
+	for (var i=0; i<Explore.ROWS; i++, yOffset += SignalVis.SIGNAL_SEPARATION + SignalVis.SIGNAL_H) 
+	{
+
+		var xOffset = SignalVis.SIGNAL_SEPARATION;
+		var visRow = [];
+		for (var j=0; j<Explore.COLS; j++, xOffset += SignalVis.SIGNAL_SEPARATION + SignalVis.SIGNAL_W) 
+		{
+			var g = svg.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
+			var signalVis = new SignalVis(g);
+			visRow.push(signalVis);
+		}
+		this.signalMultiples.push( visRow );
+	}
 }
+
+Explore.COLS = 1;
+Explore.ROWS = 2;
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
