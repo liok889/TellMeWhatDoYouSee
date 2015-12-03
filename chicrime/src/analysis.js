@@ -17,15 +17,30 @@ function GridAnalysis(theMap, svgExplore)
 	var yOffset = ClusterSelector.RECT_OFFSET + 12;
 	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
-	(function(grid) {
-		grid.selector.setSelectionBrushCallback(function(ids) {
-			grid.brushSelectionMembers(ids);
-		});
-	})(this);
 
 	// add exploration pane
 	var gExplore = this.svgExplore.append("g");
 	this.explore = new Explore(gExplore);
+
+
+	// initialize callbacks 
+	(function(grid) 
+	{
+		grid.selector.setSelectionBrushCallback(function(ids) {
+			grid.brushSelectionMembers(ids);
+		});
+	
+		grid.selector.setDragCallback(
+			function(selection) {
+				grid.explore.dragSelection(selection);
+			},
+			function(selection) {
+				grid.explore.endDragSelection(selection);
+			}
+		);
+	})(this);
+
+
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -118,6 +133,7 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 
 GridAnalysis.prototype.resetView = function() {
 	this.selector.clearAll();
+	this.explore.clearAll();
 }
 
 // send the analysis reuest as a JSON request

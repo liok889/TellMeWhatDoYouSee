@@ -381,6 +381,8 @@ ClusterSelector.prototype.clearAll = function()
 {
 	this.selections = [];
 	this.svg.selectAll("g").remove();
+
+	// restore default selection colors
 	ClusterSelector.SELECTION_COLORS = [];
 	ClusterSelector.DEFAULT_COLORS.forEach(function(element) {
 		ClusterSelector.SELECTION_COLORS.push(element);
@@ -430,7 +432,6 @@ ClusterSelector.prototype.dragSelection = function(selection)
 		this.dragG.html( container.html() );
 
 		var selectionOffset = this.getSelectionOffset(selection);
-		console.log("selectionOffset: " + selectionOffset);
 		var mouseInRect = d3.mouse(container.node());
 		coord = [
 			this.selectionWidgetOffset[0] + mouseSVG[0] - mouseInRect[0],
@@ -452,6 +453,11 @@ ClusterSelector.prototype.dragSelection = function(selection)
 	// drag the selection
 	this.dragG.attr("transform", "translate(" + coord[0] + "," + coord[1] + ")");
 
+	// do a callback
+	if (this.dragCallback)
+	{
+		this.dragCallback(selection);
+	}
 }
 
 ClusterSelector.prototype.endDragSelection = function(selection)
@@ -459,6 +465,17 @@ ClusterSelector.prototype.endDragSelection = function(selection)
 	this.dragG.remove();
 	this.dragG = undefined;
 	this.draggedSelection = undefined;
+
+	if (this.endDragCallback) 
+	{
+		this.endDragCallback(selection);
+	}
+}
+
+ClusterSelector.prototype.setDragCallback = function(drag, endDrag) 
+{
+	this.dragCallback = drag;
+	this.endDragCallback = endDrag;
 }
 
 function mapifyMemberList(ar) 

@@ -50,44 +50,51 @@ Signal.prototype.enter = function(group)
 
 Signal.prototype.exit =function()
 {
-	var _midPathGenerator = jQuery.extend(true, {}, this.pathGenerator);
-	_midPathGenerator.y(function(d, i) { return 0.5 * (SIGNAL_H - 2*SIGNAL_PAD); });
-	
-	(function(signal, midPathGenerator) {
+	var _midPathGenerator = this.selection.getTimeseries().getPathGenerator(
+		SIGNAL_W,
+		SIGNAL_H,
+		SIGNAL_PAD,
+		undefined,
+		SIGNAL_H - 2*SIGNAL_PAD
+	);
 
-		signal.path.transition()
-		.attr("d", midPathGenerator(this.selection.getSeries()))
-		.each("end", function() 
-		{
-			signal.getGroup().remove();
-		});
+	(function(signal, midPathGenerator) {
+		signal.path.transition().duration(3000)
+			.attr("d", midPathGenerator(signal.getSelection().getTimeseries()))
+			.each("end", function() 
+			{
+				signal.getGroup().remove();
+			});
 	})(this, _midPathGenerator);
 }
 
 function generateSignalPath(group, timeseries, color)
 {
-	var PAD = SIGNAL_PAD;
+	// actual path generator
 	var pathGenerator = timeseries.getPathGenerator(
 		SIGNAL_W, 
 		SIGNAL_H,
-		PAD		
+		SIGNAL_PAD		
 	);
 
 	// make a baseline generator, which will give us an initial path with Y set to 0
 	// so that we can make a nice transition
-	var baselinePathGenerator = jQuery.extend(true, {}, pathGenerator);
-	baselinePathGenerator.y(function(d, i) { return SIGNAL_H - 2*PAD; });
+	var baselinePathGenerator = timeseries.getPathGenerator(
+		SIGNAL_W, 
+		SIGNAL_H, 
+		SIGNAL_PAD, 
+		undefined, 
+		SIGNAL_H-2*SIGNAL_PAD
+	);
 
 
 	// make a pth 
-	var pathG = group.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
+	var pathG = group.append("g").attr("transform", "translate(" + SIGNAL_PAD + "," + SIGNAL_PAD + ")");
 	var path = pathG.append("path")
 		.attr("class", "timeseriesPlot")
 		.attr("d", baselinePathGenerator(timeseries.getSeries()))
-		.attr("stroke", color || "black")
-		.attr("stroke-width", "3px")
-		.attr("fill", "none");
-	
+		.attr("stroke", color || "black");
+
 	path.transition()
 		.attr("d", pathGenerator(timeseries.getSeries()));
 
@@ -107,6 +114,11 @@ function SignalVis(g)
 	// group
 	this.group = g;
 	this.init();
+}
+
+SignalVis.prototype.getContentContainer = function()
+{
+	return this.group;
 }
 
 SignalVis.prototype.init = function()
@@ -131,10 +143,10 @@ SignalVis.prototype.addSignal = function(selection)
 	var exists = false;
 	for (var i=0, N=this.signals.length; i<N; i++) 
 	{
-		var s = this.signals[i].getSelection;
+		var s = this.signals[i].getSelection();
 		if (selection == s) 
 		{
-			this.jiggleSignal(signals[i].getGroup());
+			this.jiggleSignal(this.signals[i].getGroup());
 			exists = true;
 			break;
 		}
@@ -166,22 +178,32 @@ SignalVis.prototype.removeSignal = function(selection)
 	}
 }
 
+SignalVis.prototype.clearAll = function()
+{
+	this.signals = [];
+	this.updateSignals();
+}
+
 SignalVis.prototype.updateSignals = function()
 {
 	// bind to groups
 	var update = this.group.selectAll("g.signalGroup").data(
 		this.signals, 
-		function(d) { return d.getSelection().selecitonID }
+		function(signal) { return signal.getSelection().selectionID; }
 	);
 	
 	// deal with enters
 	var enter = update.enter().append("g")
-		.attr("class", "signalGroup")
-		.each(function(signal) {
+		.attr("class", "signalGroup");
+
+	// invoke enter
+	enter
+		.each(function(signal) 
+		{
 			signal.enter(d3.select(this));
 		});
 
-	// keep track of times series
+	// keep track of the sum of times series
 	(function(sumSeries, _enter, _exit) 
 	{
 		_enter.each(function(signal) {
@@ -191,7 +213,7 @@ SignalVis.prototype.updateSignals = function()
 		_exit.each(function(signal) {
 			sumSeries.subtract(signal.getSelection().getTimeseries());
 		});
-	})(this.sumSeries, enter, exit);
+	})(this.sumSeries, enter, update.exit());
 
 	// exits the graphics
 	var exit = update.exit().each(function(signal) {
@@ -206,14 +228,15 @@ SignalVis.prototype.jiggleSignal = function(_g)
 	{
 		var xOffset = (1.0 - JIGGLE_FACTOR)* w/2;
 		var yOffset = (1.0 - JIGGLE_FACTOR)* h/2;
+		var oldTransform = (transform && transform !== "") ? (transform + ",")  : "";
 
 		g.transition().duration(50)
-			.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+			.attr("transform", oldTransform + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
 
 		setTimeout(function() {
 			g.transition().duration(60).attr("transform", transform);
 		}, 60);
-	})(_g, _g.attr("transform"), this.w, this.h)
+	})(_g, _g.attr("transform") || "", SIGNAL_W, SIGNAL_H)
 }
 
 // ==================================
@@ -223,6 +246,7 @@ function Explore(svg)
 {
 	this.svg = svg;
 	this.signalMultiples = [];
+	this.signalList = [];
 
 	var yOffset = SIGNAL_SEPARATION;
 	for (var i=0; i<Explore.ROWS; i++, yOffset += SIGNAL_SEPARATION + SIGNAL_H) 
@@ -235,10 +259,64 @@ function Explore(svg)
 			var g = svg.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 			var signalVis = new SignalVis(g);
 			visRow.push(signalVis);
+			this.signalList.push(signalVis);
+
 		}
 		this.signalMultiples.push( visRow );
 	}
 }
+
+Explore.prototype.clearAll = function()
+{
+	// clear all signals
+	for (var i=0, N=this.signalList.length; i<N; i++) {
+		this.signalList[i].clearAll();
+	}
+}
+
+Explore.prototype.dragSelection = function(selection)
+{
+	this.selectionDrag = undefined;
+
+	// see if we are within any signal visualizer
+	for (var i=0, N=this.signalMultiples.length; i<N; i++) 
+	{
+		var row = this.signalMultiples[i];
+		for (var j=0, M=row.length; j<M; j++) 
+		{
+			var signalVis = this.signalMultiples[i][j];
+
+			// see if we are within this signal
+			var container = signalVis.getContentContainer();
+			var m = d3.mouse( container.node() );
+			if (
+				SIGNAL_W >= m[0] && m[0] >= 0 &&
+				SIGNAL_H >= m[1] && m[1] >= 0
+			) {
+				signalVis.bgRect.style("fill", "#cccccc");
+				this.selectionDrag = 
+				{
+					signalVis: signalVis,
+					selection: selection,
+					ij: [i, j]
+				};
+			}
+			else {
+				signalVis.bgRect.style("fill", "");
+			}
+		}
+	}
+}
+
+Explore.prototype.endDragSelection = function(selection)
+{
+	var drop = this.selectionDrag;
+	if (drop) {
+		drop.signalVis.bgRect.style("fill", "");
+		drop.signalVis.addSignal( drop.selection );
+	}
+}
+
 
 Explore.COLS = 1;
 Explore.ROWS = 2;
