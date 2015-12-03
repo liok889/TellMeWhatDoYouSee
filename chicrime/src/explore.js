@@ -93,7 +93,7 @@ function generateSignalPath(group, timeseries, color)
 	var path = pathG.append("path")
 		.attr("class", "timeseriesPlot")
 		.attr("d", baselinePathGenerator(timeseries.getSeries()))
-		.attr("stroke", color || "black");
+		.style("stroke", color || "black");
 
 	path.transition()
 		.attr("d", pathGenerator(timeseries.getSeries()));
