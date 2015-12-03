@@ -8,6 +8,14 @@ var SIGNAL_INDIVIDUAL = 0;
 var SIGNAL_AVG = 1;
 var SIGNAL_DIFF = 2;
 
+// constants
+// ==========
+SIGNAL_SEPARATION = 15;
+SIGNAL_PAD = 7;
+SIGNAL_W = 400;
+SIGNAL_H = 150;
+
+
 // ==================================
 // Signal
 // ==================================
@@ -43,7 +51,7 @@ Signal.prototype.enter = function(group)
 Signal.prototype.exit =function()
 {
 	var _midPathGenerator = jQuery.extend(true, {}, this.pathGenerator);
-	_midPathGenerator.y(function(d, i) { return 0.5 * (SignalVis.SIGNAL_H - 2*SignalVis.SIGNAL_PAD); });
+	_midPathGenerator.y(function(d, i) { return 0.5 * (SIGNAL_H - 2*SIGNAL_PAD); });
 	
 	(function(signal, midPathGenerator) {
 
@@ -58,17 +66,17 @@ Signal.prototype.exit =function()
 
 function generateSignalPath(group, timeseries, color)
 {
-	var PAD = SignalVis.SIGNAL_PAD;
+	var PAD = SIGNAL_PAD;
 	var pathGenerator = timeseries.getPathGenerator(
-		SignalVis.SIGNAL_W, 
-		SignalVis.SIGNAL_H,
+		SIGNAL_W, 
+		SIGNAL_H,
 		PAD		
 	);
 
 	// make a baseline generator, which will give us an initial path with Y set to 0
 	// so that we can make a nice transition
 	var baselinePathGenerator = jQuery.extend(true, {}, pathGenerator);
-	baselinePathGenerator.y(function(d, i) { return SignalVis.SIGNAL_H - 2*PAD; });
+	baselinePathGenerator.y(function(d, i) { return SIGNAL_H - 2*PAD; });
 
 
 	// make a pth 
@@ -98,11 +106,15 @@ function SignalVis(g)
 {
 	// group
 	this.group = g;
+	this.init();
+}
 
+SignalVis.prototype.init = function()
+{
 	// add a rectangle to this group
-	this.bgRect = g.append("rect")
-		.attr("width", SignalVis.SIGNAL_W)
-		.attr("height". SignalVis.SIGNAL_H)
+	this.bgRect = this.group.append("rect")
+		.attr("width", SIGNAL_W)
+		.attr("height", SIGNAL_H)
 		.attr("class", "signalBox");
 	
 	// we'll store all signals here
@@ -204,14 +216,6 @@ SignalVis.prototype.jiggleSignal = function(_g)
 	})(_g, _g.attr("transform"), this.w, this.h)
 }
 
-// constants
-// ==========
-SignalVis.SIGNAL_SEPARATION = 15;
-SignalVis.SIGNAL_PAD = 7;
-SignalVis.SIGNAL_W = 400;
-SignalVis.SIGNAL_H = 150;
-
-
 // ==================================
 // Explore
 // ==================================
@@ -220,13 +224,13 @@ function Explore(svg)
 	this.svg = svg;
 	this.signalMultiples = [];
 
-	var yOffset = SignalVis.SIGNAL_SEPARATION;
-	for (var i=0; i<Explore.ROWS; i++, yOffset += SignalVis.SIGNAL_SEPARATION + SignalVis.SIGNAL_H) 
+	var yOffset = SIGNAL_SEPARATION;
+	for (var i=0; i<Explore.ROWS; i++, yOffset += SIGNAL_SEPARATION + SIGNAL_H) 
 	{
 
-		var xOffset = SignalVis.SIGNAL_SEPARATION;
+		var xOffset = SIGNAL_SEPARATION;
 		var visRow = [];
-		for (var j=0; j<Explore.COLS; j++, xOffset += SignalVis.SIGNAL_SEPARATION + SignalVis.SIGNAL_W) 
+		for (var j=0; j<Explore.COLS; j++, xOffset += SIGNAL_SEPARATION + SIGNAL_W) 
 		{
 			var g = svg.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 			var signalVis = new SignalVis(g);

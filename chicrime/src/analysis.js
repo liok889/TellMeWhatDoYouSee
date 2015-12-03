@@ -14,17 +14,18 @@ function GridAnalysis(theMap, svgExplore)
 
 	// create a selection object
 	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2);
-	var yOffset = ClusterSelector.RECT_OFFSET;
-	var g = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
-	this.selector = new ClusterSelector(g, this);
+	var yOffset = ClusterSelector.RECT_OFFSET + 12;
+	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
+	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
 	(function(grid) {
 		grid.selector.setSelectionBrushCallback(function(ids) {
 			grid.brushSelectionMembers(ids);
 		});
 	})(this);
 
-	// add selection button
-	
+	// add exploration pane
+	var gExplore = this.svgExplore.append("g");
+	this.explore = new Explore(gExplore);
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
