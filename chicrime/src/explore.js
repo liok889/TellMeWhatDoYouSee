@@ -45,7 +45,6 @@ Signal.prototype.enter = function(group)
 
 	this.pathG = ret.pathG;
 	this.path = ret.path;
-	this.pathGenerator = ret.pathGenerator;
 }
 
 Signal.prototype.exit =function()
@@ -62,8 +61,9 @@ Signal.prototype.exit =function()
 	(function(signal, midPathGenerator) 
 	{
 		var series = signal.getSelection().getTimeseries().getSeries();
-		signal.path.transition().duration(300)
+		signal.path.transition()
 			.attr("d", midPathGenerator(series))
+			.style("stroke-opacity", 0.0)
 			.each("end", function() 
 			{
 				signal.getGroup().remove();
@@ -71,14 +71,18 @@ Signal.prototype.exit =function()
 	})(this, _midPathGenerator);
 }
 
+Signal.prototype.updateTimeseries = function()
+{
+	var timeseries =  this.selection.getTimeseries();
+	var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
+	this.path.transition()
+		.attr("d", pathGenerator(timeseries.getSeries()));
+}
+
 function generateSignalPath(group, timeseries, color)
 {
 	// actual path generator
-	var pathGenerator = timeseries.getPathGenerator(
-		SIGNAL_W, 
-		SIGNAL_H,
-		SIGNAL_PAD		
-	);
+	var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
 
 	// make a baseline generator, which will give us an initial path with Y set to 0
 	// so that we can make a nice transition
@@ -104,7 +108,6 @@ function generateSignalPath(group, timeseries, color)
 	return {
 		pathG: pathG,
 		path: path,
-		pathGenerator: pathGenerator
 	};
 }
 
@@ -187,6 +190,29 @@ SignalVis.prototype.clearAll = function()
 	this.updateSignals();
 }
 
+SignalVis.prototype.updateOneSignal = function(selection)
+{
+	// check to see which selection it is
+	var update = false;
+	for (var i=0, N=this.signals.length; i<N; i++) {
+		var signal = this.signals[i];
+		if (signal.getSelection() == selection) 
+		{
+			signal.updateTimeseries();
+			update = true;
+			break;
+		}
+	}
+
+	if (update) {
+		this.calcAvgSignal();
+		return true;
+	}
+	else {
+		return false;
+	}
+}
+
 SignalVis.prototype.updateSignals = function()
 {
 	// bind to groups
@@ -222,6 +248,19 @@ SignalVis.prototype.updateSignals = function()
 	var exit = update.exit().each(function(signal) {
 		signal.exit();
 	});
+
+	this.avgSeries = this.sumSeries.clone();
+	this.avgSeries.normalize();
+}
+
+SignalVis.prototype.calcAvgSignal = function()
+{
+	this.sumSeries = new Timeseries();
+	for (var i=0, N=this.signals.length; i<N; i++) {
+		this.sumSeries.add(this.signals[i].getSelection().getTimeseries());
+	}
+	this.avgSeries = this.sumSeries.clone();
+	this.avgSeries.normalize();
 }
 
 SignalVis.prototype.jiggleSignal = function(_g)
@@ -326,6 +365,18 @@ Explore.prototype.removeSelection = function(selection) {
 		this.signalList[i].removeSignal(selection);
 	}
 }
+
+Explore.prototype.updateSelectionCallback = function(selection) {
+	for (var i=0, N=this.signalList.length; i<N; i++) {
+		this.signalList[i].updateOneSignal(selection);
+	}
+}
+
+Explore.prototype.setSeriesLabels = function() {
+
+}
+
+
 
 Explore.COLS = 1;
 Explore.ROWS = 2;

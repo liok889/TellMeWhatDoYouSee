@@ -44,6 +44,12 @@ function GridAnalysis(theMap, svgExplore)
 				grid.explore.removeSelection(selection);
 			}
 		);
+
+		grid.selector.setUpdateSelectionCallback(
+			function(selection) {
+				grid.explore.updateSelectionCallback(selection);
+			}
+		);
 	})(this);
 
 

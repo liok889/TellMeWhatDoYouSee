@@ -220,10 +220,6 @@ ClusterSelector.prototype.removeSelection = function(selection)
 		ClusterSelector.SELECTION_COLORS.push(selection.color);
 	}
 	this.updateSelections();
-
-	if (this.removeSelectionCallback) {
-		this.removeSelectionCallback(selection);
-	}
 }
 
 ClusterSelector.prototype.updateSelections = function() 
@@ -246,9 +242,19 @@ ClusterSelector.prototype.updateSelections = function()
 	})
 
 	// exit
-	update.exit().transition().attr("transform", function(d) {
-		return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
-	});
+	var exitSelection = update.exit();
+	(function(callback, exit) 
+	{
+		exit.transition().attr("transform", function(d) {
+			return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
+		});
+
+		if (callback) {
+			exit.each(function(selection) {
+				callback(selection);
+			});
+		}
+	})( this.removeSelectionCallback, exitSelection );
 
 	// build color map
 	var colorMap = d3.map();
@@ -346,6 +352,9 @@ ClusterSelector.prototype.newSelection = function(members)
 			{
 				modifiedSelections.push(s);
 				s.updateMemberList(ret.memberList);
+				if (this.updateSelectionCallback) {
+					this.updateSelectionCallback( s );
+				}
 			}
 			else
 			{
@@ -476,15 +485,17 @@ ClusterSelector.prototype.endDragSelection = function(selection)
 	}
 }
 
-ClusterSelector.prototype.setDragCallback = function(drag, endDrag) 
-{
+ClusterSelector.prototype.setDragCallback = function(drag, endDrag) {
 	this.dragCallback = drag;
 	this.endDragCallback = endDrag;
 }
-
 ClusterSelector.prototype.setRemoveSelectionCallback = function(callback) {
 	this.removeSelectionCallback = callback;
 }
+ClusterSelector.prototype.setUpdateSelectionCallback = function(callback) {
+	this.updateSelectionCallback = callback;
+}
+
 
 function mapifyMemberList(ar) 
 {
