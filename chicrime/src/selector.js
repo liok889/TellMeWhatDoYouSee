@@ -475,15 +475,17 @@ ClusterSelector.prototype.dragSelection = function(selection)
 
 ClusterSelector.prototype.endDragSelection = function(selection)
 {
-	if (this.dragG) {
+	if (this.dragG) 
+	{
 		this.dragG.remove();
 		this.dragG = undefined;
-		this.draggedSelection = undefined;
+	
+		if (this.endDragCallback) {
+			this.endDragCallback(selection);
+		}
 	}
+	this.draggedSelection = undefined;
 
-	if (this.endDragCallback) {
-		this.endDragCallback(selection);
-	}
 }
 
 ClusterSelector.prototype.setDragCallback = function(drag, endDrag) {

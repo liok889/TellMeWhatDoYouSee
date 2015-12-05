@@ -12,7 +12,7 @@ var SIGNAL_DIFF = 2;
 // ==========
 SIGNAL_SEPARATION = 15;
 SIGNAL_PAD = 7;
-SIGNAL_W = 400;
+SIGNAL_W = 550;
 SIGNAL_H = 150;
 
 
@@ -335,7 +335,7 @@ Explore.prototype.dragSelection = function(selection)
 				SIGNAL_W >= m[0] && m[0] >= 0 &&
 				SIGNAL_H >= m[1] && m[1] >= 0
 			) {
-				signalVis.bgRect.style("fill", "#cccccc");
+				signalVis.bgRect.attr("class", "signalBoxDrop");
 				this.selectionDrag = 
 				{
 					signalVis: signalVis,
@@ -344,7 +344,7 @@ Explore.prototype.dragSelection = function(selection)
 				};
 			}
 			else {
-				signalVis.bgRect.style("fill", "");
+				signalVis.bgRect.attr("class", "signalBox");
 			}
 		}
 	}
@@ -354,8 +354,9 @@ Explore.prototype.endDragSelection = function(selection)
 {
 	var drop = this.selectionDrag;
 	if (drop) {
-		drop.signalVis.bgRect.style("fill", "");
+		drop.signalVis.bgRect.attr("class", "signalBox");
 		drop.signalVis.addSignal( drop.selection );
+		drop = undefined;
 	}
 }
 

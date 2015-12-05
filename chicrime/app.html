@@ -124,7 +124,14 @@
 
 		/* signal box background rectangle */
 		.signalBox {
-			fill: #ffffff;
+			fill: black;
+			stroke: #cccccc;
+			stroke-width: 1px;
+			stroke-dasharray: 5,5			
+		}
+
+		.signalBoxDrop {
+			fill: #3f3f3f;
 			stroke: #cccccc;
 			stroke-width: 1px;
 			stroke-dasharray: 5,5			
@@ -185,7 +192,7 @@
 	<!-- user interface elements -->
 
 	<!-- exploration pane -->
-	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 1px #cccccc; visibility: true">
+	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 0px #cccccc; visibility: true">
 	</svg>
 
 	<!-- MDS pane -->
