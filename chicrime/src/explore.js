@@ -12,7 +12,7 @@ var SIGNAL_DIFF = 2;
 // ==========
 SIGNAL_SEPARATION = 15;
 SIGNAL_PAD = 7;
-SIGNAL_W = 550;
+SIGNAL_W = 570;
 SIGNAL_H = 150;
 
 
@@ -294,7 +294,7 @@ function Explore(svg)
 	for (var i=0; i<Explore.ROWS; i++, yOffset += SIGNAL_SEPARATION + SIGNAL_H) 
 	{
 
-		var xOffset = SIGNAL_SEPARATION;
+		var xOffset = 2;
 		var visRow = [];
 		for (var j=0; j<Explore.COLS; j++, xOffset += SIGNAL_SEPARATION + SIGNAL_W) 
 		{
