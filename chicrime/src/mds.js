@@ -160,15 +160,10 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 				});
 
 			thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
-			console.log("Adding click to imgAddSelection");
 			d3.select("#imgAddSelection")
 				.on("click", function() 
 				{
-					console.log("imgAddSelection click");
 					grid.makeBrushSelection(thisObject.brushedIDs);
-				})
-				.on("mouseover", function() {
-					console.log("imgAdd mouse over");
 				});
 
 		}

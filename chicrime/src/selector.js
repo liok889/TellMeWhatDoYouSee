@@ -154,18 +154,29 @@ Selection.prototype.populateSelection = function(g)
 Selection.prototype.jiggle = function()
 {
 	var JIGGLE_FACTOR = 1.2;
-	(function(g, transform) 
+	if (this.jiggling) {
+		// prevent more than one jiggle animation
+		return;
+	}
+	else
 	{
-		var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;
-		var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
+		this.jiggling = true;
+		(function(g, transform, selection) 
+		{
+			var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;
+			var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
+			var oldTransform = (transform !== "") ? (transform + ",")  : "";
 
-		g.transition().duration(50)
-			.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+			g.transition().duration(50)
+				.attr("transform", oldTransform + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
 
-		setTimeout(function() {
-			g.transition().duration(60).attr("transform", transform);
-		}, 60);
-	})(this.g, this.g.attr("transform"))
+			setTimeout(function() {
+				g.transition().duration(60).attr("transform", transform).each("end", function() {
+					selection.jiggling = undefined;
+				});
+			}, 60);
+		})(this.g, this.g.attr("transform"), this)
+	}
 }
 
 

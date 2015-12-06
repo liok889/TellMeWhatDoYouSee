@@ -184,22 +184,24 @@
 			<input value="monthly" name="signalAggregate" id="radioWarpMonthly" type="radio">monthly (6 hours)<br>
 			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
 			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">daily (30 min)<br>
+			<!--
 			<input value="total" name="signalAggregate" id="radioWarpDaily" type="radio">total<br>
-
+			-->
+			
 			<input id="buttonRunAnalysis" type="button" value="update" style="background: #FFDDDD;font-family: helvetica; font-size: 10pt; font-weight: 100">
 		</form>
 
-		<div id="loadSpinnerPlaceholder" style="width: 100px; height: 30px; margin-top: 2px; margin-bottom: 0px"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
+		<div id="loadSpinnerPlaceholder" style="position: relative; left: 35px; top: -30px; width: 100px; height: 30px; margin-top: 2px; margin-bottom: 0px"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
 	</div>
 	<!-- user interface elements -->
 
 	<!-- exploration pane -->
-	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 0px #cccccc; visibility: true">
+	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 0px #cccccc; visibility: true; z-index: 1">
 	</svg>
 
 	<!-- MDS pane -->
-	<svg id="svgMDS" width="590" height="360" style="position: absolute; top: 480px; left: 580px; border: solid 1px #cccccc; z-index: 1"></svg>
-	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 460px; left: 585px; z-index: 2"></img>
+	<svg id="svgMDS" width="590" height="360" style="position: absolute; top: 480px; left: 580px; border: solid 1px #cccccc; z-index: 2"></svg>
+	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 485px; left: 585px; z-index: 3"></img>
 
 	<!-- similarity matrix and dendogram pane -->
 	<svg id="svgDendogram" width="100" height="280" style="position: absolute; top: 520px; left: 1180px; border: none"></svg>
@@ -309,15 +311,8 @@
 			// run analysis
 			d3.select("#buttonRunAnalysis").on("click", function() 
 			{
-				// turn on load spinner
+				// make load spinner visible
 				var spinner = d3.select("#loadSpinner").style("visibility", "visible");
-
-				// position the spinner just next to the button
-				var rect = $(this).offset();
-				d3.select("#loadSpinnerPlaceholder")
-					.style("position", "relative")
-					.style("left", "35px")
-					.style("top", "-30px");
 
 				// project the grid
 				projectGrid();
