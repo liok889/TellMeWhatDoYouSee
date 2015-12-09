@@ -81,17 +81,6 @@ Signal.prototype.updateTimeseries = function()
 		.attr("d", pathGenerator(timeseries.getSeries()));
 }
 
-Signal.prototype.brushSignal = function()
-{
-	putNodeOnTop(this.group.node());
-	this.path.style("stroke-width", "3px");
-}
-
-Signal.prototype.unbrushSignal = function()
-{
-	this.path.style("stroke-width", "");
-}
-
 function generateSignalPath(group, timeseries, color)
 {
 	// actual path generator
@@ -339,19 +328,15 @@ SignalVis.prototype.updateSignals = function()
 			.attr("cy", SIGNAL_H - R)
 			.attr("cx", SIGNAL_W + OFFSET + R)
 			.attr("r", R)
-			.on("mouseover", function(signal) {
+			.on("mouseover", function(signal) 
+			{
 				d3.select(this).style("stroke", "black");
-				signal.brushSignal();
-				if (thisSignalVis.brushSignalCallback) {
-					thisSignalVis.brushSignalCallback(signal);
-				}
+				thisSignalVis.brushSignal(signal);
 			})
-			.on("mouseout", function(signal) {
+			.on("mouseout", function(signal) 
+			{
 				d3.select(this).style("stroke", "");
-				signal.unbrushSignal();
-				if (thisSignalVis.brushSignalCallback) {
-					thisSignalVis.brushSignalCallback(null);
-				}
+				thisSignalVis.brushSignal(null);
 			})
 			.on("dblclick", function(signal) {
 				thisSignalVis.removeSignal(signal.getSelection());
@@ -378,6 +363,42 @@ SignalVis.prototype.updateSignals = function()
 	else
 	{
 		this.modeCircle.attr("visibility", "visible");
+	}
+}
+
+SignalVis.prototype.brushSignal = function(_signal)
+{
+	var pathSelection = this.group.selectAll("g.individualSignalGroup").selectAll("path");
+
+	if (_signal) {
+		(function(signal, path, mode) {
+			path
+				.style("stroke-opacity", function(d) { return (d == signal ? 1.0 : 0.6);})
+				.style("stroke-width", function(d) { return (d == signal ? "2px" : "");})
+				.each(function(d) {
+					if (d == signal) 
+					{
+						var parentG = getParentElement(this.parentElement, "g", "individualSignalGroup");
+						putNodeOnTop( parentG );
+						if (mode != SIGNAL_INDIVIDUAL) {
+							d3.select(parentG).attr("visibility", "visible");
+						}
+
+					}
+				});
+
+		})(_signal, pathSelection, this.mode);
+	}
+	else
+	{
+		pathSelection.style("stroke-opacity", "").style("stroke-width", "");
+		if (this.mode != SIGNAL_INDIVIDUAL) {
+			this.group.selectAll("g.individualSignalGroup").attr("visibility", "hidden");			
+		}
+	}
+
+	if (this.brushSignalCallback) {
+		this.brushSignalCallback(_signal);
 	}
 }
 
@@ -505,9 +526,7 @@ Explore.prototype.dragSelection = function(selection)
 
 Explore.prototype.setBrushSignalCallback = function(callback)
 {
-	for (var i=0, N=this.signalList.length; i<N; i++) {
-		this.signalList.brushSignalCallback = callback;
-	}
+	this.brushSignalCallback = callback;
 }
 
 Explore.prototype.endDragSelection = function(selection)
