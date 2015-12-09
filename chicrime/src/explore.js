@@ -349,7 +349,9 @@ SignalVis.prototype.updateSignals = function()
 			.attr("r", R)
 			.style("fill-opacity", "1.0");
 
-		update.exit().transition().style("fill-opacity", "0.0").remove();
+		update.exit().transition().style("fill-opacity", "0.0")
+			.each(function(signal) { thisSignalVis.brushSignal(null)})
+			.remove();
 
 	})(this, updateLabels, circle_r, CIRCLE_OFFSET);
 
