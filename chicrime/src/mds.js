@@ -246,9 +246,8 @@ MDS.prototype.brushPoints = function(ids)
 
 				if (idMap.get(id)) 
 				{
-					// remove and put at top
-					var n = jQuery(this);
-					n.parent().append(n.detach());
+					// remove node and put at top
+					putNodeOnTop(this);
 					brushedList.push(d);
 					return true;
 				}

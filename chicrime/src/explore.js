@@ -15,6 +15,8 @@ SIGNAL_PAD = 7;
 SIGNAL_W = 570;
 SIGNAL_H = 150;
 
+var CIRCLE_R = 8;
+var CIRCLE_OFFSET = 2;
 
 // ==================================
 // Signal
@@ -79,6 +81,17 @@ Signal.prototype.updateTimeseries = function()
 		.attr("d", pathGenerator(timeseries.getSeries()));
 }
 
+Signal.prototype.brushSignal = function()
+{
+	putNodeOnTop(this.group.node());
+	this.path.style("stroke-width", "3px");
+}
+
+Signal.prototype.unbrushSignal = function()
+{
+	this.path.style("stroke-width", "");
+}
+
 function generateSignalPath(group, timeseries, color)
 {
 	// actual path generator
@@ -118,6 +131,7 @@ function generateSignalPath(group, timeseries, color)
 function SignalVis(g)
 {
 	// group
+	this.mode = SIGNAL_INDIVIDUAL;
 	this.group = g;
 	this.init();
 }
@@ -134,6 +148,27 @@ SignalVis.prototype.init = function()
 		.attr("width", SIGNAL_W)
 		.attr("height", SIGNAL_H)
 		.attr("class", "signalBox");
+
+	(function(thisSignalVis) 
+	{
+		thisSignalVis.modeCircle = thisSignalVis.group.append("circle")
+			.attr("cx", SIGNAL_W + CIRCLE_OFFSET + CIRCLE_R)
+			.attr("cy", CIRCLE_R + CIRCLE_OFFSET)
+			.attr("r", CIRCLE_R)
+			.style("fill", "#ffffff")
+			.on("mouseover", function() {
+				d3.select(this).style("stroke", "black");
+			})
+			.on('mouseout', function() {
+				d3.select(this).style("stroke", "");
+			})
+			.on("click", function() 
+			{
+				thisSignalVis.mode = (thisSignalVis.mode + 1) % 2;
+				thisSignalVis.updateMode();
+			});
+	})(this);
+
 	
 	// we'll store all signals here
 	this.signals = [];
@@ -141,6 +176,34 @@ SignalVis.prototype.init = function()
 	// maintain a running sum and average time series
 	this.sumSeries = new Timeseries();
 	this.avgSeries = new Timeseries();
+
+	this.updateSignals();
+}
+
+SignalVis.prototype.updateMode = function() 
+{
+	var visVector = null;
+	switch (this.mode)
+	{
+	case SIGNAL_INDIVIDUAL:
+		visVector = [true, false, false];
+		break;
+
+	case SIGNAL_AVG:
+		visVector = [false, true, false];
+		break;
+
+	case SIGNAL_DIFF:
+		visVector = [false, false, true];
+		break;
+	}
+
+	this.group.selectAll("g.individualSignalGroup").transition()
+		.attr("visibility", visVector[0] ? "visible" : "hidden");
+	this.group.selectAll("g.averageSignalGroup").transition()
+		.attr("visibility", visVector[1] ? "visible" : "hidden");
+	this.group.selectAll("g.diffSignalGroup").transition()
+		.attr("visibility", visVector[2] ? "visible" : "hidden");
 }
 
 SignalVis.prototype.addSignal = function(selection)
@@ -216,14 +279,15 @@ SignalVis.prototype.updateOneSignal = function(selection)
 SignalVis.prototype.updateSignals = function()
 {
 	// bind to groups
-	var update = this.group.selectAll("g.signalGroup").data(
+	var update = this.group.selectAll("g.individualSignalGroup").data(
 		this.signals, 
 		function(signal) { return signal.getSelection().selectionID; }
 	);
 	
 	// deal with enters
 	var enter = update.enter().append("g")
-		.attr("class", "signalGroup");
+		.attr("visibility", this.mode == SIGNAL_INDIVIDUAL ? "visible" : "hidden")
+		.attr("class", "individualSignalGroup");
 
 	// invoke enter
 	enter
@@ -249,18 +313,107 @@ SignalVis.prototype.updateSignals = function()
 		signal.exit();
 	});
 
-	this.avgSeries = this.sumSeries.clone();
-	this.avgSeries.normalize();
+
+	// make color labels
+	var updateLabels = this.group.selectAll("circle.timeseriesColorButton").data(
+		this.signals, function(signal) { return signal.getSelection().selectionID; }
+	);
+
+	// adjust circle radius, if necessary
+	var totalCircle = this.signals.length * (CIRCLE_OFFSET + CIRCLE_R*2);
+	var circle_r;
+	
+	if (totalCircle > SIGNAL_H - CIRCLE_OFFSET * 2 - CIRCLE_R * 2) {
+		circle_r = (SIGNAL_H - CIRCLE_OFFSET*2 - CIRCLE_R*2) / (2*this.signals.length);
+		circle_r -= CIRCLE_OFFSET;
+	} else {
+		circle_r = CIRCLE_R;
+	}
+
+	(function(thisSignalVis, update, R, OFFSET) {
+
+		update.enter().append("circle")
+			.attr("class", "timeseriesColorButton")
+			.style("fill", function(signal) { return signal.getSelection().getColor(); })
+			.style("fill-opacity", "0.0")
+			.attr("cy", SIGNAL_H - R)
+			.attr("cx", SIGNAL_W + OFFSET + R)
+			.attr("r", R)
+			.on("mouseover", function(signal) {
+				d3.select(this).style("stroke", "black");
+				signal.brushSignal();
+				if (thisSignalVis.brushSignalCallback) {
+					thisSignalVis.brushSignalCallback(signal);
+				}
+			})
+			.on("mouseout", function(signal) {
+				d3.select(this).style("stroke", "");
+				signal.unbrushSignal();
+				if (thisSignalVis.brushSignalCallback) {
+					thisSignalVis.brushSignalCallback(null);
+				}
+			})
+			.on("dblclick", function(signal) {
+				thisSignalVis.removeSignal(signal.getSelection());
+			});
+
+
+		update.transition()
+			.attr("cx", SIGNAL_W + OFFSET + R)
+			.attr("cy", function(d, i) { return SIGNAL_H - R - i*(2*R+OFFSET);})
+			.attr("r", R)
+			.style("fill-opacity", "1.0");
+
+		update.exit().transition().style("fill-opacity", "0.0").remove();
+
+	})(this, updateLabels, circle_r, CIRCLE_OFFSET);
+
+	// calculate average signal
+	this.calcAvgSignal();
+
+	if (this.signals.length == 0) 
+	{
+		this.modeCircle.attr("visibility", "hidden");
+	}
+	else
+	{
+		this.modeCircle.attr("visibility", "visible");
+	}
 }
 
 SignalVis.prototype.calcAvgSignal = function()
 {
+	// calculate a new average time series
 	this.sumSeries = new Timeseries();
 	for (var i=0, N=this.signals.length; i<N; i++) {
 		this.sumSeries.add(this.signals[i].getSelection().getTimeseries());
 	}
 	this.avgSeries = this.sumSeries.clone();
-	this.avgSeries.normalize();
+	if (this.signals.length > 0) {
+		this.avgSeries.multiplyScalar( 1 / this.signals.length);
+		this.avgSeries.normalize();
+	}
+
+	// update
+	var updateAvg = this.group.selectAll("g.averageSignalGroup").data([this.avgSeries]);
+	var g = updateAvg.enter().append("g")
+		.attr("class", "averageSignalGroup")
+		.attr("visibility", this.mode == SIGNAL_AVG ? "visible" : "hidden");
+	
+	// generate a signal path
+	generateSignalPath(g, this.avgSeries, "white");
+
+	// update, if no enter
+	if (updateAvg.enter().size() == 0) 
+	{
+		var pathGenerator = this.avgSeries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
+		(function(update, pg, avgSeries) 
+		{
+			update.selectAll("path").transition()
+				.attr("d", pg(avgSeries.getSeries()));
+		})(updateAvg, pathGenerator, this.avgSeries);
+	}
+
 }
 
 SignalVis.prototype.jiggleSignal = function(_g)
@@ -347,6 +500,13 @@ Explore.prototype.dragSelection = function(selection)
 				signalVis.bgRect.attr("class", "signalBox");
 			}
 		}
+	}
+}
+
+Explore.prototype.setBrushSignalCallback = function(callback)
+{
+	for (var i=0, N=this.signalList.length; i<N; i++) {
+		this.signalList.brushSignalCallback = callback;
 	}
 }
 

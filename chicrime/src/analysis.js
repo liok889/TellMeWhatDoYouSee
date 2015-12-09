@@ -238,7 +238,7 @@ GeoRect.prototype.projectSelfPath = function()
 }
 
 GridAnalysis.GRAPH_W = 175;
-GridAnalysis.GRAPH_H = 75;
+GridAnalysis.GRAPH_H = 55;
 GridAnalysis.FULL_MATRIX = true;
 GridAnalysis.MATRIX_ELEMENT_BRUSH = 0;
 

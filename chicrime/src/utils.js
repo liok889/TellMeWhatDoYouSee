@@ -13,3 +13,9 @@ function getSVG(element)
 		return getSVG(element.parentElement);
 	}
 }
+
+function putNodeOnTop(node)
+{
+	var n = jQuery(node);
+	n.parent().append(n.detach());
+}
