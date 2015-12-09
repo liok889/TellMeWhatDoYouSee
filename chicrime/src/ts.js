@@ -63,15 +63,19 @@ Timeseries.prototype.extent = function() {
 
 Timeseries.prototype.initEmpty = function(N) {
 	var series = new Array(N);
-	for (var i=0; i<N; i++)
+	for (var i=0; i<N; i++) {
 		series[i] = 0;
+	}
 	this.series = series;
 }
 
 Timeseries.prototype.add = function(anotherSeries, scalar) 
 {
 	// make sure the two series have equal lengths
-	if (this.series.length != anotherSeries.size()) {
+	if (this.series.length == 0 && anotherSeries.size() > 0) {
+		this.initEmpty(anotherSeries.size());
+	}
+	else if (this.series.length != anotherSeries.size()) {
 		console.error("WARNING: Timeseries.add() mismatch in length");
 		return;
 	}
@@ -79,6 +83,7 @@ Timeseries.prototype.add = function(anotherSeries, scalar)
 	for (var i=0, N=this.series.length; i<N; i++) {
 		this.series[i] += (scalar ? scalar : 1.0) * anotherSeries.series[i];
 	}
+	this.seriesMax = undefined;
 }
 
 Timeseries.prototype.subtract = function(anotherSeries) 
@@ -86,7 +91,7 @@ Timeseries.prototype.subtract = function(anotherSeries)
 	this.add(anotherSeries, -1.0);
 }
 
-Timeseries.prototype.multiply = function(scalar)
+Timeseries.prototype.multiplyScalar = function(scalar)
 {
 	for (var i=0, N=this.series.length; i<N; i++) {
 		this.series[i] *= scalar;
@@ -121,14 +126,20 @@ Timeseries.prototype.normalize = function()
 	return this;
 }
 
-Timeseries.prototype.getPathGenerator = function(width, height, pad) 
+Timeseries.prototype.getPathGenerator = function(width, height, pad, constX, constY) 
 {
-	return (function(W, H, N, seriesMax) 
+	return (function(W, H, N, seriesMax, X, Y) 
 	{
-		return pathGenerator = d3.svg.line()
-			.x(function(d, i) { return i/(N-1)           * W; })
-			.y(function(d, i) { return (1.0-d/seriesMax) * H; });
+		return d3.svg.line()
+			.x(X || function(d, i) { return i/(N-1)           * W; })
+			.y(Y || function(d, i) { return (1.0-d/seriesMax) * H; });
 	
-	})(width - (pad ? 2*pad : 0), height - (pad ? 2*pad : 0), this.series.length, this.figureMax());
+	})(
+		width - (pad ? 2*pad : 0), 
+		height - (pad ? 2*pad : 0), 
+		this.series.length, this.figureMax(),
+		constX,
+		constY
+	);
 
 }

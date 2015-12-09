@@ -14,17 +14,45 @@ function GridAnalysis(theMap, svgExplore)
 
 	// create a selection object
 	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2);
-	var yOffset = ClusterSelector.RECT_OFFSET;
-	var g = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
-	this.selector = new ClusterSelector(g, this);
-	(function(grid) {
+	var yOffset = ClusterSelector.RECT_OFFSET + 12;
+	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
+	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
+
+	// add exploration pane
+	var gExplore = this.svgExplore.append("g");
+	this.explore = new Explore(gExplore);
+
+
+	// initialize callbacks 
+	(function(grid) 
+	{
 		grid.selector.setSelectionBrushCallback(function(ids) {
 			grid.brushSelectionMembers(ids);
 		});
+	
+		grid.selector.setDragCallback(
+			function(selection) {
+				grid.explore.dragSelection(selection);
+			},
+			function(selection) {
+				grid.explore.endDragSelection(selection);
+			}
+		);
+
+		grid.selector.setRemoveSelectionCallback(
+			function(selection) {
+				grid.explore.removeSelection(selection);
+			}
+		);
+
+		grid.selector.setUpdateSelectionCallback(
+			function(selection) {
+				grid.explore.updateSelectionCallback(selection);
+			}
+		);
 	})(this);
 
-	// add selection button
-	
+
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -117,6 +145,7 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 
 GridAnalysis.prototype.resetView = function() {
 	this.selector.clearAll();
+	this.explore.clearAll();
 }
 
 // send the analysis reuest as a JSON request
@@ -209,7 +238,7 @@ GeoRect.prototype.projectSelfPath = function()
 }
 
 GridAnalysis.GRAPH_W = 175;
-GridAnalysis.GRAPH_H = 75;
+GridAnalysis.GRAPH_H = 55;
 GridAnalysis.FULL_MATRIX = true;
 GridAnalysis.MATRIX_ELEMENT_BRUSH = 0;
 

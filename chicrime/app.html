@@ -124,10 +124,22 @@
 
 		/* signal box background rectangle */
 		.signalBox {
-			fill: #d8d8d8;
+			fill: black;
 			stroke: #cccccc;
 			stroke-width: 1px;
-			stroke-dasharray: 5,5			
+			stroke-dasharray: 2,2			
+		}
+
+		.signalBoxDrop {
+			fill: #3f3f3f;
+			stroke: #cccccc;
+			stroke-width: 1px;
+			stroke-dasharray: 2,2			
+		}
+
+		.timeseriesPlot {
+			stroke-width: 1.5px;
+			fill: none;
 		}
 	</style>
 
@@ -137,13 +149,13 @@
 	<div id='map' style="border: solid 1px black"></div>
 	
 	<!-- user interface -->
-	<div id='uiPane' style="position: absolute; top: 20px; left: 1385px; background: #eee; width: 150px; height: 230px; border: solid 1px #cccccc; padding: 5px 10px">
+	<div id='uiPane' style="position: absolute; top: 20px; left: 1385px; background: #eee; width: 150px; height: 190px; border: solid 1px #cccccc; padding: 5px 10px">
 		<form>
 			<div class="sectionLabel">Map</div>
 			<input id="checkShowCommunities" type="checkbox" value="1" checked></input>show communities<br>
 			<input id="checkShowCity" type="checkbox" value="1" checked></input>show city boundaries<br>
 			map opacity</span>
-			<div id="sliderMapOpacity" style="margin-top: 5px; width: 100px; height: 10px"></div>
+			<div id="sliderMapOpacity" style="margin-top: 5px; width: 120px; height: 10px"></div>
 
 			<br>
 			<div class="sectionLabel">Partition grid</div>
@@ -151,17 +163,19 @@
 			<input id="checkShowHeatmap" type="checkbox" value="1" checked></input>show heatmap<br>
 			
 			grid resolution
-			<div id="sliderGridResolution" style="margin-top: 5px; margin-bottom: 7px; width: 100px; height: 10px"></div>
+			<div id="sliderGridResolution" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
+			<!--
 			grid overlap
 			<div id="sliderGridOverlap" style="margin-top: 5px; width: 100px; height: 10px"></div>
+			-->
 		</form>
 	</div>
 
-	<div id="featurePane" style="position: absolute; top: 270px; left: 1385px; background: #f3f3f3; width: 150px; height: 230px; border: solid 1px #cccccc; padding: 5px 10px">
+	<div id="featurePane" style="position: absolute; top: 230px; left: 1385px; background: #f3f3f3; width: 150px; height: 200px; border: solid 1px #cccccc; padding: 5px 10px">
 		<div class="sectionLabel">Signal</div>
 		
 		<span id="labelYearlyRange">data range</span>
-		<div id="sliderYearlyRange" style="margin-top: 5px; margin-bottom: 7px; width: 100px; height: 10px"></div>
+		<div id="sliderYearlyRange" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
 		<br>
 		
 		<b>aggregate</b>
@@ -170,26 +184,28 @@
 			<input value="monthly" name="signalAggregate" id="radioWarpMonthly" type="radio">monthly (6 hours)<br>
 			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
 			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">daily (30 min)<br>
+			<!--
 			<input value="total" name="signalAggregate" id="radioWarpDaily" type="radio">total<br>
-
-			<input id="buttonRunAnalysis" type="button" value="run analysis" style="background: #FFBDBD;font-family: helvetica; font-size: 10pt; font-weight: 100">
+			-->
+			
+			<input id="buttonRunAnalysis" type="button" value="update" style="background: #FFDDDD;font-family: helvetica; font-size: 10pt; font-weight: 100">
 		</form>
 
-		<div style="width: 100px; height: 30px; margin-top: 10px; margin-bottom: 10px;"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
+		<div id="loadSpinnerPlaceholder" style="position: relative; left: 35px; top: -30px; width: 100px; height: 30px; margin-top: 2px; margin-bottom: 0px"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
 	</div>
 	<!-- user interface elements -->
 
 	<!-- exploration pane -->
-	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 1px #cccccc; visibility: true">
+	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 0px #cccccc; visibility: true; z-index: 1">
 	</svg>
 
 	<!-- MDS pane -->
-	<svg id="svgMDS" width="500" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc; z-index:1"></svg>
-	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 525px; left: 585px; z-index: 2"></img>
+	<svg id="svgMDS" width="590" height="360" style="position: absolute; top: 480px; left: 580px; border: solid 1px #cccccc; z-index: 2"></svg>
+	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 485px; left: 585px; z-index: 3"></img>
 
 	<!-- similarity matrix and dendogram pane -->
-	<svg id="svgDendogram" width="150" height="320" style="position: absolute; top: 520px; left: 1090px; border: none"></svg>
-	<canvas id="canvasMatrix" width="320" height="320" style="position: absolute; top: 520px; left: 1240px; border: none"></canvas>
+	<svg id="svgDendogram" width="100" height="280" style="position: absolute; top: 520px; left: 1180px; border: none"></svg>
+	<canvas id="canvasMatrix" width="280" height="280" style="position: absolute; top: 520px; left: 1280px; border: none"></canvas>
 
 
 	<script type="text/javascript">
@@ -266,6 +282,7 @@
 				}
 			});
 
+			/*
 			$("#sliderGridOverlap").slider({
 				range: false,
 				min: 0, max: .8, step: .01,
@@ -275,6 +292,7 @@
 					projectGrid();
 				}
 			});
+			*/
 
 			// yearly range
 			$("#sliderYearlyRange").slider({
@@ -293,9 +311,12 @@
 			// run analysis
 			d3.select("#buttonRunAnalysis").on("click", function() 
 			{
-				// turn on load spinner
+				// make load spinner visible
+				var spinner = d3.select("#loadSpinner").style("visibility", "visible");
+
+				// project the grid
 				projectGrid();
-				d3.select("#loadSpinner").style("visibility", "visible");
+
 
 				// set type of aggregation
 				var signalAggregate = $('input[name="signalAggregate"]:checked').val();

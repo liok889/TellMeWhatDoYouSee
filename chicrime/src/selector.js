@@ -53,9 +53,15 @@ Selection.prototype.updateMemberList = function(newMembers)
 	}
 	else
 	{
-		this.pathG.selectAll("path.timeseriesSelection").attr("d", pathGenerator(this.avgTimeseries.getSeries()));
+		this.pathG.selectAll("path.timeseriesSelection").transition()
+			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 };
+
+Selection.prototype.getContentContainer = function()
+{
+	return this.content;
+}
 
 Selection.prototype.populateSelection = function(g)
 {
@@ -122,6 +128,23 @@ Selection.prototype.populateSelection = function(g)
 						thisSelection.parentSelector.brushMembers();
 					}
 				}, 150);
+			})
+			.on("mousedown", function() {
+				thisSelection.parentSelector.beginDragSelection(thisSelection);
+				
+				// register mousemove callback on window so we can continue to track dragging
+				d3.select(window).on("mousemove.selectionDrag", function() {
+					thisSelection.parentSelector.dragSelection(thisSelection);
+				})
+				d3.select(window).on("mouseup.selectionDrag", function() {
+
+					// unregister event handlers
+					d3.select(window).on("mouseup.selectionDrag", null);
+					d3.select(window).on("mousemove.selectionDrag", null);
+
+					thisSelection.parentSelector.endDragSelection(thisSelection);
+
+				})
 			});
 
 	})(this)
@@ -131,18 +154,29 @@ Selection.prototype.populateSelection = function(g)
 Selection.prototype.jiggle = function()
 {
 	var JIGGLE_FACTOR = 1.2;
-	(function(g, transform) 
+	if (this.jiggling) {
+		// prevent more than one jiggle animation
+		return;
+	}
+	else
 	{
-		var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;
-		var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
+		this.jiggling = true;
+		(function(g, transform, selection) 
+		{
+			var xOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_W/2;
+			var yOffset = (1.0 - JIGGLE_FACTOR)*ClusterSelector.RECT_H/2;
+			var oldTransform = (transform !== "") ? (transform + ",")  : "";
 
-		g.transition().duration(50)
-			.attr("transform", transform + (transform !== "" ? "," : "") + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
+			g.transition().duration(50)
+				.attr("transform", oldTransform + "scale(" + JIGGLE_FACTOR + "),translate(" + xOffset + "," + yOffset + ")");
 
-		setTimeout(function() {
-			g.transition().duration(60).attr("transform", transform);
-		}, 60);
-	})(this.g, this.g.attr("transform"))
+			setTimeout(function() {
+				g.transition().duration(60).attr("transform", transform).each("end", function() {
+					selection.jiggling = undefined;
+				});
+			}, 60);
+		})(this.g, this.g.attr("transform"), this)
+	}
 }
 
 
@@ -150,11 +184,10 @@ Selection.prototype.jiggle = function()
  * ClusterSelector
  * ======================================
  */
-function ClusterSelector(svg, grid)
+function ClusterSelector(svg, grid, _offset)
 {
 	// initialize to empty selections
 	this.selections = [];
-	this.selectionMap = d3.map();
 
 	this.svg = svg;
 	this.grid = grid;
@@ -164,6 +197,9 @@ function ClusterSelector(svg, grid)
 
 	// color map
 	this.colorMap = d3.map();
+
+	// store transform
+	this.selectionWidgetOffset = _offset;
 }
 
 ClusterSelector.prototype.setMDS = function(_mds) {
@@ -217,9 +253,19 @@ ClusterSelector.prototype.updateSelections = function()
 	})
 
 	// exit
-	update.exit().transition().attr("transform", function(d) {
-		return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
-	});
+	var exitSelection = update.exit();
+	(function(callback, exit) 
+	{
+		exit.transition().attr("transform", function(d) {
+			return d3.select(this).attr("transform") + ",scale(" + (1e-6) + ")";
+		});
+
+		if (callback) {
+			exit.each(function(selection) {
+				callback(selection);
+			});
+		}
+	})( this.removeSelectionCallback, exitSelection );
 
 	// build color map
 	var colorMap = d3.map();
@@ -241,6 +287,28 @@ ClusterSelector.prototype.updateSelections = function()
 		this.mds.setColorMap(this.colorMap);
 		this.mds.restoreColors();
 	}
+}
+
+ClusterSelector.prototype.getSelectionOffset = function(selection)
+{
+	var I = this.getSelectionIndex(selection);
+	if (I === null) {
+		return null;
+	}
+	else
+	{
+		return [0, I * (ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_H) ];
+	}
+}
+
+ClusterSelector.prototype.getSelectionIndex = function(selection)
+{
+	for (var i=0, N=this.selections.length; i<N; i++) {
+		if (this.selections[i] == selection) {
+			return i;
+		}
+	}
+	return null;
 }
 
 ClusterSelector.prototype.newSelection = function(members)
@@ -295,6 +363,9 @@ ClusterSelector.prototype.newSelection = function(members)
 			{
 				modifiedSelections.push(s);
 				s.updateMemberList(ret.memberList);
+				if (this.updateSelectionCallback) {
+					this.updateSelectionCallback( s );
+				}
 			}
 			else
 			{
@@ -333,8 +404,9 @@ ClusterSelector.prototype.newSelection = function(members)
 ClusterSelector.prototype.clearAll = function() 
 {
 	this.selections = [];
-	this.selectionMap = d3.map();
 	this.svg.selectAll("g").remove();
+
+	// restore default selection colors
 	ClusterSelector.SELECTION_COLORS = [];
 	ClusterSelector.DEFAULT_COLORS.forEach(function(element) {
 		ClusterSelector.SELECTION_COLORS.push(element);
@@ -365,6 +437,79 @@ ClusterSelector.prototype.brushMembers = function(selection)
 		this.selectionBrushCallback(ids);
 	}
 }
+
+ClusterSelector.prototype.beginDragSelection = function(selection)
+{
+	this.draggedSelection = selection;
+}
+
+ClusterSelector.prototype.dragSelection = function(selection)
+{
+	var mouseSVG = d3.mouse(this.svg.node());
+	var coord = [];
+
+	if (!this.dragG)
+	{
+		var container = selection.getContentContainer();
+		this.dragG = d3.select(this.svg.node().parentElement).append("g")
+			.attr("class", "exploreDrag");
+		this.dragG.html( container.html() );
+
+		var selectionOffset = this.getSelectionOffset(selection);
+		var mouseInRect = d3.mouse(container.node());
+		coord = [
+			this.selectionWidgetOffset[0] + mouseSVG[0] - mouseInRect[0],
+			this.selectionWidgetOffset[1] + mouseSVG[1] - mouseInRect[1],	
+		];
+
+		this.dragGCoord0 = mouseSVG;
+		this.dragGCoord1 = coord;
+	}
+	else
+	{
+		coord = [
+			this.dragGCoord1[0] - this.dragGCoord0[0] + mouseSVG[0],
+			this.dragGCoord1[1] - this.dragGCoord0[1] + mouseSVG[1]
+		];
+
+	}
+	
+	// drag the selection
+	this.dragG.attr("transform", "translate(" + coord[0] + "," + coord[1] + ")");
+
+	// do a callback
+	if (this.dragCallback)
+	{
+		this.dragCallback(selection);
+	}
+}
+
+ClusterSelector.prototype.endDragSelection = function(selection)
+{
+	if (this.dragG) 
+	{
+		this.dragG.remove();
+		this.dragG = undefined;
+	
+		if (this.endDragCallback) {
+			this.endDragCallback(selection);
+		}
+	}
+	this.draggedSelection = undefined;
+
+}
+
+ClusterSelector.prototype.setDragCallback = function(drag, endDrag) {
+	this.dragCallback = drag;
+	this.endDragCallback = endDrag;
+}
+ClusterSelector.prototype.setRemoveSelectionCallback = function(callback) {
+	this.removeSelectionCallback = callback;
+}
+ClusterSelector.prototype.setUpdateSelectionCallback = function(callback) {
+	this.updateSelectionCallback = callback;
+}
+
 
 function mapifyMemberList(ar) 
 {

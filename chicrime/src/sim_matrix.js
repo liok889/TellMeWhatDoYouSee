@@ -640,13 +640,16 @@ SimilarityMatrix.prototype.brush = function(i)
 	}
 }
 
-SimilarityMatrix.prototype.brushElements = function(elements, color)
+SimilarityMatrix.prototype.brushElements = function(elementList, color)
 {
+	var elements = elementList || [];
 	if (this.svg) {
 
 		var elementLayout = [];
-		for (var i = 0, len = elements.length; i < len; i++)
+
+		for (var i = 0, len = elements.length; i < len; i++) {
 			elementLayout.push(this.data2ij[ elements[i] ]);
+		}
 
 		this.svg.selectAll("g.elementBrush").remove();
 		var g = this.svg.append("g")
