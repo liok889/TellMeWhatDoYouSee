@@ -122,12 +122,58 @@ function SignalVis(g)
 	// group
 	this.mode = SIGNAL_INDIVIDUAL;
 	this.group = g;
+
+	// list of signals we want to callback on updates
+	this.updateCallbacks = [];
+
+	// init
 	this.init();
+}
+
+SignalVis.prototype.setOpposingSignal = function(signal)
+{
+	if (this.opposingSignal) {
+		this.opposingSignal.removeUpdateCallback(this);
+		this.opposingSignal = undefined;
+	}
+
+	this.opposingSignal = signal;
+	if (signal) {
+		signal.addUpdateCallback(this);
+	}
+	this.calcDiffSignal();
+}
+
+SignalVis.prototype.addUpdateCallback = function(signal)
+{
+	// make sure signal does not exist
+	for (var i=0, N=this.updateCallbacks.length; i<N; i++) {
+		if (this.updateCallbacks[i] == signal) {
+			return;
+		}
+	}
+	this.updateCallbacks.push(signal);
+}
+
+SignalVis.prototype.removeUpdateCallback = function(signal)
+{
+	// make sure signal does not exist
+	for (var i=0, N=this.updateCallbacks.length; i<N; i++) {
+		if (this.updateCallbacks[i] == signal) {
+			this.updateCallbacks.splice(i, 1);
+			break;
+		}
+	}
 }
 
 SignalVis.prototype.getContentContainer = function()
 {
 	return this.group;
+}
+
+SignalVis.prototype.getAvgTimeseries = function()
+{
+	return this.avgSeries;
 }
 
 SignalVis.prototype.init = function()
@@ -153,7 +199,7 @@ SignalVis.prototype.init = function()
 			})
 			.on("click", function() 
 			{
-				thisSignalVis.mode = (thisSignalVis.mode + 1) % 2;
+				thisSignalVis.mode = (thisSignalVis.mode + 1) % 3;
 				thisSignalVis.updateMode();
 			});
 	})(this);
@@ -240,6 +286,11 @@ SignalVis.prototype.clearAll = function()
 {
 	this.signals = [];
 	this.updateSignals();
+}
+
+SignalVis.prototype.opposingUpdate = function()
+{
+	this.calcDiffSignal();
 }
 
 SignalVis.prototype.updateOneSignal = function(selection)
@@ -331,12 +382,16 @@ SignalVis.prototype.updateSignals = function()
 			.on("mouseover", function(signal) 
 			{
 				d3.select(this).style("stroke", "black");
-				thisSignalVis.brushSignal(signal);
+				if (thisSignalVis.mode != SIGNAL_DIFF) {
+					thisSignalVis.brushSignal(signal);
+				}
 			})
 			.on("mouseout", function(signal) 
 			{
 				d3.select(this).style("stroke", "");
-				thisSignalVis.brushSignal(null);
+				if (thisSignalVis.mode != SIGNAL_DIFF) {
+					thisSignalVis.brushSignal(null);
+				}
 			})
 			.on("dblclick", function(signal) {
 				thisSignalVis.removeSignal(signal.getSelection());
@@ -358,6 +413,9 @@ SignalVis.prototype.updateSignals = function()
 	// calculate average signal
 	this.calcAvgSignal();
 
+	// calculate signal difference
+	this.calcDiffSignal();
+
 	if (this.signals.length == 0) 
 	{
 		this.modeCircle.attr("visibility", "hidden");
@@ -365,6 +423,12 @@ SignalVis.prototype.updateSignals = function()
 	else
 	{
 		this.modeCircle.attr("visibility", "visible");
+	}
+
+	// do callbacks
+	for (var i=0, N=this.updateCallbacks.length; i<N; i++) 
+	{
+		this.updateCallbacks[i].opposingUpdate();
 	}
 }
 
@@ -439,6 +503,154 @@ SignalVis.prototype.calcAvgSignal = function()
 
 }
 
+SignalVis.prototype.calcDiffSignal = function(otherSignal)
+{
+	// make / select groups
+	var diffGroup = this.group.selectAll("g.diffSignalGroup");
+	var g = null;
+	if (diffGroup.size() == 0) 
+	{
+		diffGroup = this.group.append("g")
+			.attr("class", "diffSignalGroup")
+			.attr("visibility", this.mode == SIGNAL_DIFF ? "visible" : "hidden");
+		g = diffGroup.append("g").attr("class", "diffPaths");
+		
+		// add a zero baseline
+		diffGroup.append("line")
+			.attr("x1", SIGNAL_PAD)
+			.attr("y1", (SIGNAL_H-2*SIGNAL_PAD) / 2 + SIGNAL_PAD)
+			.attr("x2", SIGNAL_W-SIGNAL_PAD)
+			.attr("y2", (SIGNAL_H-2*SIGNAL_PAD) / 2 + SIGNAL_PAD)
+			.attr("stroke", "white")
+			.attr("stroke-width", "1px");
+	}
+	else
+	{
+		g = diffGroup.selectAll("g.diffPaths")
+		//g.selectAll("path").remove();
+	}
+
+	var A = this.avgSeries;
+	var B = (otherSignal || this.opposingSignal);
+	if (B) {
+		B = B.getAvgTimeseries();
+	}
+
+	var paths = [];
+	if (!B || A.size() == 0 || B.size() == 0) 
+	{
+		
+		// nothing to plot here
+		
+	}
+	else
+	{
+		
+		var diff = A.clone().subtract(B);
+		var diffSeries = diff.getSeries();
+		
+		// build a new different
+		var lastV = diffSeries[0];
+		var overZero = lastV >= 0.0;	// see if we are over or under
+		var curVertexSet = [[0, 0]];
+		
+		var minV = diffSeries[0];
+		var maxV = diffSeries[0];
+
+		for (var i=1, N=diffSeries.length; i<N; i++) 
+		{
+			var v = diffSeries[i];
+			minV = Math.min(minV, v);
+			maxV = Math.max(maxV, v);
+
+			// did we change curve direction
+			if ((v >= 0 && overZero) || (v < 0 && !overZero)) {
+				// no, still same, add vertex
+				curVertexSet.push([i, v]);
+			}
+			else
+			{
+				// change direction
+				var zeroIntercept = (0-lastV) / (v-lastV);
+				var zeroXIntercept = (i-1) + zeroIntercept;
+				curVertexSet.push([zeroXIntercept, 0]);
+
+				// close the path
+				paths.push({
+					direction: overZero, 
+					vertices: curVertexSet
+				});
+
+				// start a new vertex set
+				curVertexSet = [[zeroXIntercept, 0], [i, v]];
+				overZero = (v >= 0);
+			}
+			lastV = v;
+		}
+
+		if (curVertexSet.length > 0) {
+			curVertexSet.push([diffSeries.length-1, 0]);
+			paths.push({
+				direction: overZero,
+				vertices: curVertexSet
+			});
+		}
+
+		var yRange = Math.max( Math.abs(minV), Math.abs(maxV) );
+		yRange = Math.max(yRange, 0.5);
+
+		var xScale = d3.scale.linear().domain([0, diffSeries.length-1]).range([SIGNAL_PAD, SIGNAL_W-SIGNAL_PAD]);
+		var yScale = d3.scale.linear().domain([-yRange, yRange]).range([ SIGNAL_H-SIGNAL_PAD, SIGNAL_PAD ]);
+
+		// generate commands for the paths
+		for (var i=0, K=paths.length; i<K; i++) 
+		{
+
+			var vertices = paths[i].vertices;
+			var d = "";
+			var baseD = "";
+
+			for (var j=0, M=vertices.length; j<M; j++) 
+			{
+				var v = vertices[j];
+				d += j == 0 ? "M " : " L ";
+				d += xScale(v[0]) + " " + yScale(v[1]);
+
+				baseD += j == 0 ? "M " : " L ";
+				baseD += xScale(v[0]) + " " + yScale(0);
+
+			}
+			
+			paths[i].d = d;
+			paths[i].baseD = baseD;
+		}
+	}
+
+	// bind
+	var update = g.selectAll("path").data(paths);
+	
+	var enter = update.enter().append("path")
+		.attr("stroke", "white")
+		.attr("stroke-width", "1.5px")
+		.attr("d", function(path) { return path.baseD; })
+		.attr("fill", "none");
+
+	(function(update) {
+		update.transition().duration(50).attr("fill", "none");
+		setTimeout(function() {
+			update.transition().duration(250)
+				.attr("fill", function(path) { return path.direction ? "red" : "blue"; })
+				.attr("d", function(path) { return path.d; });
+		}, 50);
+	})(update);
+
+	
+	update.exit().transition()
+		.attr("d", function(path) { return path.baseD; })
+		.attr("fill", "none")
+		.remove();
+}
+
 SignalVis.prototype.jiggleSignal = function(_g)
 {
 	var JIGGLE_FACTOR = 1.1;
@@ -482,6 +694,11 @@ function Explore(svg)
 		}
 		this.signalMultiples.push( visRow );
 	}
+
+	// set opposing signal
+	this.signalList[0].setOpposingSignal(this.signalList[1]);
+	this.signalList[1].setOpposingSignal(this.signalList[0]);
+
 }
 
 Explore.prototype.clearAll = function()

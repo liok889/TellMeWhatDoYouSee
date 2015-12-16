@@ -84,11 +84,12 @@ Timeseries.prototype.add = function(anotherSeries, scalar)
 		this.series[i] += (scalar ? scalar : 1.0) * anotherSeries.series[i];
 	}
 	this.seriesMax = undefined;
+	return this;
 }
 
 Timeseries.prototype.subtract = function(anotherSeries) 
 {
-	this.add(anotherSeries, -1.0);
+	return this.add(anotherSeries, -1.0);
 }
 
 Timeseries.prototype.multiplyScalar = function(scalar)
