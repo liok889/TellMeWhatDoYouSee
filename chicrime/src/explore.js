@@ -308,7 +308,7 @@ SignalVis.prototype.updateOneSignal = function(selection)
 	}
 
 	if (update) {
-		this.calcAvgSignal();
+		this.updateSignals();
 		return true;
 	}
 	else {
