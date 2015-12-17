@@ -18,6 +18,9 @@ SIGNAL_H = 150;
 var CIRCLE_R = 8;
 var CIRCLE_OFFSET = 2;
 
+var COLOR_OVER = '#ff6666';
+var COLOR_UNDER = '#6666ff';
+
 // ==================================
 // Signal
 // ==================================
@@ -639,7 +642,7 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 		update.transition().duration(50).attr("fill", "none");
 		setTimeout(function() {
 			update.transition().duration(250)
-				.attr("fill", function(path) { return path.direction ? "red" : "blue"; })
+				.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; })
 				.attr("d", function(path) { return path.d; });
 		}, 50);
 	})(update);
