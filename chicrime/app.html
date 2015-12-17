@@ -127,7 +127,7 @@
 			fill: #3f3f3f;
 			stroke: #cccccc;
 			stroke-width: 1px;
-			stroke-dasharray: 2,2			
+			/*stroke-dasharray: 2,2*/			
 		}
 
 		.signalBoxDrop {
@@ -140,6 +140,42 @@
 		.timeseriesPlot {
 			stroke-width: 1.5px;
 			fill: none;
+		}
+
+		.xAxis path {
+			stroke-width: 1px;
+			stroke: white;
+			fill: none;
+		}
+		
+		.xAxis line {
+			stroke-width: 1px;
+			stroke: white;
+			fill: none;
+		}
+
+		.xAxis text {
+			font-family: sans-serif;
+			font-size: 11px;
+			fill: white;
+		}
+
+		.yAxis path {
+			stroke-width: 1px;
+			stroke: white;
+			fill: none;
+		}
+
+		.yAxis line {
+			stroke-width: 1px;
+			stroke: white;
+			fill: none;
+		}
+
+		.yAxis text {
+			font-family: sans-serif;
+			font-size: 10px;
+			fill: white;
 		}
 	</style>
 
@@ -196,7 +232,7 @@
 	<!-- user interface elements -->
 
 	<!-- exploration pane -->
-	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 1px #cccccc; visibility: true; z-index: 1">
+	<svg id="svgExplore" width="790" height="490" style="position: absolute; top: 20px; left: 580px; border: solid 0px #cccccc; visibility: true; z-index: 1">
 	</svg>
 
 	<!-- MDS pane -->

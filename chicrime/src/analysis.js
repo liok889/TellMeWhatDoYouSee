@@ -143,9 +143,10 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
-GridAnalysis.prototype.resetView = function() {
+GridAnalysis.prototype.resetView = function(aggregate) 
+{
 	this.selector.clearAll();
-	this.explore.clearAll();
+	this.explore.clearAll(aggregate);
 }
 
 // send the analysis reuest as a JSON request
@@ -162,7 +163,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			success: function(response, textStatus, xhr) 
 			{
 				// reset the view
-				gridAnalysis.resetView();
+				gridAnalysis.resetView( jsonRequest.signalAggregate );
 
 				// parse the JSON reponse we received
 				jsonResponse = JSON.parse(response);

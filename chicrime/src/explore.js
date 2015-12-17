@@ -11,9 +11,13 @@ var SIGNAL_DIFF = 2;
 // constants
 // ==========
 SIGNAL_SEPARATION = 15;
-SIGNAL_PAD = 7;
-SIGNAL_W = 570;
-SIGNAL_H = 150;
+SIGNAL_PAD = 11;
+SIGNAL_W = 565;
+SIGNAL_H = 170;
+SIGNAL_H_PAD = 15;
+SIGNAL_W_PAD = 10;
+SIGNAL_X_OFFSET = 25;
+
 
 var CIRCLE_R = 8;
 var CIRCLE_OFFSET = 2;
@@ -183,14 +187,14 @@ SignalVis.prototype.init = function()
 {
 	// add a rectangle to this group
 	this.bgRect = this.group.append("rect")
-		.attr("width", SIGNAL_W)
-		.attr("height", SIGNAL_H)
+		.attr("width", SIGNAL_W + SIGNAL_W_PAD + SIGNAL_X_OFFSET)
+		.attr("height", SIGNAL_H + SIGNAL_H_PAD)
 		.attr("class", "signalBox");
 
 	(function(thisSignalVis) 
 	{
 		thisSignalVis.modeCircle = thisSignalVis.group.append("circle")
-			.attr("cx", SIGNAL_W + CIRCLE_OFFSET + CIRCLE_R)
+			.attr("cx", SIGNAL_W + SIGNAL_W_PAD + CIRCLE_OFFSET + SIGNAL_X_OFFSET + CIRCLE_R)
 			.attr("cy", CIRCLE_R + CIRCLE_OFFSET)
 			.attr("r", CIRCLE_R)
 			.style("fill", "#ffffff")
@@ -204,6 +208,7 @@ SignalVis.prototype.init = function()
 			{
 				thisSignalVis.mode = (thisSignalVis.mode + 1) % 3;
 				thisSignalVis.updateMode();
+				thisSignalVis.updateYAxis();
 			});
 	})(this);
 
@@ -330,7 +335,8 @@ SignalVis.prototype.updateSignals = function()
 	// deal with enters
 	var enter = update.enter().append("g")
 		.attr("visibility", this.mode == SIGNAL_INDIVIDUAL ? "visible" : "hidden")
-		.attr("class", "individualSignalGroup");
+		.attr("class", "individualSignalGroup")
+		.attr("transform", "translate(" + SIGNAL_X_OFFSET + ",0)");
 
 	// invoke enter
 	enter
@@ -379,8 +385,8 @@ SignalVis.prototype.updateSignals = function()
 			.attr("class", "timeseriesColorButton")
 			.style("fill", function(signal) { return signal.getSelection().getColor(); })
 			.style("fill-opacity", "0.0")
-			.attr("cy", SIGNAL_H - R)
-			.attr("cx", SIGNAL_W + OFFSET + R)
+			.attr("cy", SIGNAL_H + SIGNAL_H_PAD - R)
+			.attr("cx", SIGNAL_W + SIGNAL_W_PAD + SIGNAL_X_OFFSET + OFFSET + R)
 			.attr("r", R)
 			.on("mouseover", function(signal) 
 			{
@@ -402,8 +408,8 @@ SignalVis.prototype.updateSignals = function()
 
 
 		update.transition()
-			.attr("cx", SIGNAL_W + OFFSET + R)
-			.attr("cy", function(d, i) { return SIGNAL_H - R - i*(2*R+OFFSET);})
+			//.attr("cx", SIGNAL_W + OFFSET + R)
+			.attr("cy", function(d, i) { return SIGNAL_H + SIGNAL_H_PAD - R - i*(2*R+OFFSET);})
 			.attr("r", R)
 			.style("fill-opacity", "1.0");
 
@@ -433,6 +439,9 @@ SignalVis.prototype.updateSignals = function()
 	{
 		this.updateCallbacks[i].opposingUpdate();
 	}
+
+	// update Y axis
+	this.updateYAxis();
 }
 
 SignalVis.prototype.brushSignal = function(_signal)
@@ -488,7 +497,8 @@ SignalVis.prototype.calcAvgSignal = function()
 	var updateAvg = this.group.selectAll("g.averageSignalGroup").data([this.avgSeries]);
 	var g = updateAvg.enter().append("g")
 		.attr("class", "averageSignalGroup")
-		.attr("visibility", this.mode == SIGNAL_AVG ? "visible" : "hidden");
+		.attr("visibility", this.mode == SIGNAL_AVG ? "visible" : "hidden")
+		.attr("transform", "translate(" + SIGNAL_X_OFFSET + ",0)");
 	
 	// generate a signal path
 	generateSignalPath(g, this.avgSeries, "white");
@@ -515,7 +525,8 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 	{
 		diffGroup = this.group.append("g")
 			.attr("class", "diffSignalGroup")
-			.attr("visibility", this.mode == SIGNAL_DIFF ? "visible" : "hidden");
+			.attr("visibility", this.mode == SIGNAL_DIFF ? "visible" : "hidden")
+			.attr("transform", "translate(" + SIGNAL_X_OFFSET + ",0)");
 		g = diffGroup.append("g").attr("class", "diffPaths");
 		
 		// add a zero baseline
@@ -525,7 +536,9 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 			.attr("x2", SIGNAL_W-SIGNAL_PAD)
 			.attr("y2", (SIGNAL_H-2*SIGNAL_PAD) / 2 + SIGNAL_PAD)
 			.attr("stroke", "white")
-			.attr("stroke-width", "1px");
+			.attr("stroke-width", "1px")
+			.style("shape-rendering", "crispEdges");
+
 	}
 	else
 	{
@@ -600,7 +613,9 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 		}
 
 		var yRange = Math.max( Math.abs(minV), Math.abs(maxV) );
-		yRange = Math.max(yRange, 0.5);
+		yRange = Math.ceil(yRange* 10) / 10;
+		yRange = Math.max(yRange, 0.2);
+		this.yDiffRange = yRange;
 
 		var xScale = d3.scale.linear().domain([0, diffSeries.length-1]).range([SIGNAL_PAD, SIGNAL_W-SIGNAL_PAD]);
 		var yScale = d3.scale.linear().domain([-yRange, yRange]).range([ SIGNAL_H-SIGNAL_PAD, SIGNAL_PAD ]);
@@ -654,6 +669,44 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 		.remove();
 }
 
+SignalVis.prototype.updateYAxis = function()
+{
+
+	var yScale = d3.scale.linear();
+	var tickCount = 5;
+
+	if (this.mode == SIGNAL_DIFF) 
+	{
+		console.log("\tyAxis yRange: " + this.yDiffRange);
+		yScale.domain([-this.yDiffRange, this.yDiffRange]);
+		tickCount = 5;
+	}
+	else
+	{
+		console.log("\tyScale domain: 0...1");
+		yScale.domain([0, 1]);
+	}
+	yScale.range([SIGNAL_H - 2*SIGNAL_PAD, 0]);
+
+
+	this.group.selectAll("g.yAxis").remove();
+	var yAxisGroup = this.group.append("g")
+		.attr("class", "yAxis")
+		.attr("transform", "translate(" + (SIGNAL_X_OFFSET + SIGNAL_PAD/2) + "," + SIGNAL_PAD + ")");
+	
+	var yAxis = d3.svg.axis().scale(yScale).orient("left").ticks(tickCount);
+	yAxisGroup.call(yAxis);
+}
+
+SignalVis.prototype.setXAxis = function(xAxis) 
+{
+	this.group.selectAll("g.xAxis").remove();
+	this.group.append("g")
+		.attr("class", "xAxis")
+		.attr("transform", "translate(" + (SIGNAL_PAD + SIGNAL_X_OFFSET) + "," + (-SIGNAL_PAD+SIGNAL_H) + ")")
+		.call(xAxis);
+}
+
 SignalVis.prototype.jiggleSignal = function(_g)
 {
 	var JIGGLE_FACTOR = 1.1;
@@ -681,13 +734,16 @@ function Explore(svg)
 	this.signalMultiples = [];
 	this.signalList = [];
 
+	var Y_OFFSET = SIGNAL_SEPARATION + SIGNAL_H + SIGNAL_H_PAD;
+	var X_OFFSET = SIGNAL_SEPARATION + SIGNAL_W + SIGNAL_W_PAD + SIGNAL_X_OFFSET;
+
 	var yOffset = SIGNAL_SEPARATION;
-	for (var i=0; i<Explore.ROWS; i++, yOffset += SIGNAL_SEPARATION + SIGNAL_H) 
+	for (var i=0; i<Explore.ROWS; i++, yOffset += Y_OFFSET) 
 	{
 
 		var xOffset = 2;
 		var visRow = [];
-		for (var j=0; j<Explore.COLS; j++, xOffset += SIGNAL_SEPARATION + SIGNAL_W) 
+		for (var j=0; j<Explore.COLS; j++, xOffset += X_OFFSET) 
 		{
 			var g = svg.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 			var signalVis = new SignalVis(g);
@@ -704,12 +760,69 @@ function Explore(svg)
 
 }
 
-Explore.prototype.clearAll = function()
+Explore.prototype.setAxis = function(aggregation)
+{
+	if (!aggregation) {
+		return;
+	}
+	else
+	{
+		console.log("\tsetAxis, aggregation: " + aggregation);
+		var xScale = d3.scale.linear(), yScale = d3.scale.linear();
+		var labels;
+		var xAxis = d3.svg.axis().orient("bottom"), yAxis = d3.svg.axis();
+
+		switch (aggregation)
+		{
+		case "weekly":
+			labels = [
+				'Mon', 'noon', 
+				'Tue', 'noon',
+				'Wed', 'noon', 
+				'Thu', 'noon',
+				'Fri', 'noon', 
+				'Sat', 'noon',
+				'Sun', 'noon', '12am'];
+			break;
+		
+		case 'daily':
+			labels = [
+				'12am', '3', '6', '9', 'noon', '3', '6', '9', '12am'
+			];
+			break;
+		
+		case 'yearly':
+			labels = [
+				'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'
+			];
+		}
+
+		xScale.domain([0, labels.length-1]).range([0, SIGNAL_W - 2*SIGNAL_PAD]);
+
+		(function(axis, theScale, labels) 
+		{
+			var xScale = 
+			axis.scale(theScale).ticks(labels.length).tickFormat(function(i) {
+				return labels[i];
+			});
+		})(xAxis, xScale, labels);
+
+		for (var i=0, N=this.signalList.length; i<N; i++) {
+			this.signalList[i].setXAxis(xAxis);
+		}
+	}
+}
+
+Explore.prototype.clearAll = function(aggregate)
 {
 	// clear all signals
-	for (var i=0, N=this.signalList.length; i<N; i++) {
+	for (var i=0, N=this.signalList.length; i<N; i++) 
+	{
 		this.signalList[i].clearAll();
 	}
+
+	// set axis
+	this.setAxis(aggregate);
 }
 
 Explore.prototype.dragSelection = function(selection)
