@@ -250,6 +250,7 @@ function makeTimeSeries(data, sums, mean, series)
 	// loop through the time series again, adding only the onles that are not more than
 	// 3 x standard deviation away from the mean 
 	var tsIndex = [];
+	var listOfSeries = [];
 	for (var i = 0, len = series.length; i < len; i++) 
 	{
 		var s = series[i];
@@ -267,9 +268,29 @@ function makeTimeSeries(data, sums, mean, series)
 		}
 		else
 		{
-			tsDictionary.addTimeSeries(timeseries);
-			tsIndex.push([s.r, s.c]);
+			listOfSeries.push(s);
+			//tsDictionary.addTimeSeries(timeseries);
+			//tsIndex.push([s.r, s.c]);
 		}
+	}
+
+	// put in distribution measurement
+	for (var i=0, N=listOfSeries.length; i<N; i++) 
+	{
+		var s = listOfSeries[i];
+		var timeseries = data[s.r][s.c];
+		tsDictionary.addToDistribution(timeseries);
+	}
+
+	// calculate equi-probably break points
+	tsDictionary.calcEquiprobableBreaks();
+
+	// add time series to similarity analysis
+	for (var i=0, N=listOfSeries.length; i<N; i++) {
+		var s = listOfSeries[i];
+		var timeseries = data[s.r][s.c];
+		tsDictionary.addTimeSeries(timeseries);
+		tsIndex.push([s.r, s.c]);
 	}
 
 	// calculate similarity matrix
