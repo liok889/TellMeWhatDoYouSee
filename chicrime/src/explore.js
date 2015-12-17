@@ -771,7 +771,8 @@ Explore.prototype.setAxis = function(aggregation)
 		var xScale = d3.scale.linear(), yScale = d3.scale.linear();
 		var labels;
 		var xAxis = d3.svg.axis().orient("bottom"), yAxis = d3.svg.axis();
-
+		var labels = [];
+		
 		switch (aggregation)
 		{
 		case "weekly":
