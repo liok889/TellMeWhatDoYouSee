@@ -677,13 +677,11 @@ SignalVis.prototype.updateYAxis = function()
 
 	if (this.mode == SIGNAL_DIFF) 
 	{
-		console.log("\tyAxis yRange: " + this.yDiffRange);
 		yScale.domain([-this.yDiffRange, this.yDiffRange]);
 		tickCount = 5;
 	}
 	else
 	{
-		console.log("\tyScale domain: 0...1");
 		yScale.domain([0, 1]);
 	}
 	yScale.range([SIGNAL_H - 2*SIGNAL_PAD, 0]);
@@ -772,7 +770,7 @@ Explore.prototype.setAxis = function(aggregation)
 		var labels;
 		var xAxis = d3.svg.axis().orient("bottom"), yAxis = d3.svg.axis();
 		var labels = [];
-		
+
 		switch (aggregation)
 		{
 		case "weekly":
