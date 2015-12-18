@@ -267,8 +267,8 @@ function calcColMeans(M)
 	var N = M.length;
 	var means = [];
 
-	for (var i=0; i<N; i++) {
-
+	for (var i=0; i<N; i++) 
+	{
 		var t=0;
 		for (var j=0; j<N; j++)
 		{

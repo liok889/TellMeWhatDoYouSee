@@ -47,8 +47,6 @@ http.createServer(function(req, res) {
 					{
 						case 'aggregateCrimeCountOverGrid':
 							
-							console.log("aggregate-Crime-Count-OverGrid");
-
 							// aggregate crime count over grid
 							crimesQuery.aggregateCrimeCountOverGrid(jsonRequest, function(results) {
 								res.write(JSON.stringify(results));
