@@ -451,8 +451,8 @@ SignalVis.prototype.brushSignal = function(_signal)
 	if (_signal) {
 		(function(signal, path, mode) {
 			path
-				.style("stroke-opacity", function(d) { return (d == signal ? 1.0 : 0.6);})
-				.style("stroke-width", function(d) { return (d == signal ? "2px" : "");})
+				.style("stroke-opacity", function(d) { return (d == signal ? 1.0 : 0.5);})
+				.style("stroke-width", function(d) { return (d == signal ? "2.5px" : "");})
 				.each(function(d) {
 					if (d == signal) 
 					{

@@ -296,14 +296,14 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		this.selector.setMDS(this.mds);
 	}
 
-	(function(mds, matrix, tsIndex, dimensions, grid) 
+	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
 	{
 		// async MDS analysis
 		var q = queue();
 		q.defer(function(_callback) 
 		{
 			var startTime = new Date();
-			mds.plotMDS(matrix, tsIndex, dimensions, grid);
+			mds.plotMDS(matrix, tsIndex, dimensions, mdsPositions, grid);
 			var processTime = (new Date) - startTime;
 			console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
 			_callback(null);
@@ -314,6 +314,7 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		this.analysisResults.distanceMatrix,
 		this.analysisResults.tsIndex,
 		2,
+		this.analysisResults.mdsPositions,
 		this
 	);
 }
