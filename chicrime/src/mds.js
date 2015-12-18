@@ -51,20 +51,13 @@ MDS.prototype.classic = function(distances, dimensions)
 	// square distances
 	var M = numeric.mul(-0.5, numeric.pow(distances, 2));
 	
-	// double centre the rows/columns
-	/*
-	function mean(A) { return numeric.div(numeric.add.apply(null, [A]), A.length); }
-	var rowMeans = mean(M),
-	colMeans = mean(numeric.transpose(M)),
-	totalMean = mean(rowMeans);
-	*/
-
 	// calculate row, column, and whole means
 	var N = M.length;
 	var rowMeans = calcRowMeans(M);
 	var colMeans = calcColMeans(M);
 	var totalMean = calcMean(rowMeans);
 
+	// double centre the rows/columns
 	for (var i = 0; i < M.length; ++i) {
 		for (var j =0; j < M[0].length; ++j) {
 			M[i][j] += totalMean - rowMeans[i] - colMeans[j];
@@ -83,7 +76,7 @@ MDS.prototype.classic = function(distances, dimensions)
 	});
 }
 
-MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
+MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions, gridAnalysis)
 {
 	// remove an earlier MDS group and create a new one
 	this.svg.selectAll("g.mdsPointGroup").remove();
@@ -104,7 +97,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, gridAnalysis)
 
 
 	// classical MDS projection	
-	var positions = this.classic(distances, dimensions);
+	var positions = mdsPositions || this.classic(distances, dimensions);
 	var points = [];
 
 	// figure out min/max coordinates and construct scales
@@ -341,6 +334,9 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	else {
 		this.brushedSelection = undefined;
 	}
+
+	// brush exploratin pane
+	this.grid.brushExplore( brushedIDs );
 
 	// brush the heatmap and the matrix
 	this.grid.highlightHeatmapCell(brushedPoints, true);

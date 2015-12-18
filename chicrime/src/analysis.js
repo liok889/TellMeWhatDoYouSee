@@ -143,9 +143,10 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
-GridAnalysis.prototype.resetView = function() {
+GridAnalysis.prototype.resetView = function(aggregate) 
+{
 	this.selector.clearAll();
-	this.explore.clearAll();
+	this.explore.clearAll(aggregate);
 }
 
 // send the analysis reuest as a JSON request
@@ -162,7 +163,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			success: function(response, textStatus, xhr) 
 			{
 				// reset the view
-				gridAnalysis.resetView();
+				gridAnalysis.resetView( jsonRequest.signalAggregate );
 
 				// parse the JSON reponse we received
 				jsonResponse = JSON.parse(response);
@@ -203,6 +204,12 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 		})
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
+
+GridAnalysis.prototype.getTimeseries = function(index) 
+{
+	var cell = this.analysisResults.tsIndex[index];
+	return this.getGeoRect(cell).getTimeseries();
+}
 
 GridAnalysis.prototype.getGeoRect = function(c) {
 	return this.geoRectMap[ c[0] ][ c[1] ];
@@ -295,14 +302,14 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		this.selector.setMDS(this.mds);
 	}
 
-	(function(mds, matrix, tsIndex, dimensions, grid) 
+	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
 	{
 		// async MDS analysis
 		var q = queue();
 		q.defer(function(_callback) 
 		{
 			var startTime = new Date();
-			mds.plotMDS(matrix, tsIndex, dimensions, grid);
+			mds.plotMDS(matrix, tsIndex, dimensions, mdsPositions, grid);
 			var processTime = (new Date) - startTime;
 			console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
 			_callback(null);
@@ -313,6 +320,7 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		this.analysisResults.distanceMatrix,
 		this.analysisResults.tsIndex,
 		2,
+		this.analysisResults.mdsPositions,
 		this
 	);
 }
@@ -506,6 +514,18 @@ GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
 	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
 }
 
+GridAnalysis.prototype.brushExplore = function(brushedIDs)
+{
+	var timeseries = [];
+	for (var i=0, N=brushedIDs.length; i<N; i++) {
+		timeseries.push({
+			id: brushedIDs[i],
+			timeseries: this.getTimeseries(brushedIDs[i])
+		});
+	}
+	this.explore.brushDataPoints(timeseries);
+}
+
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 {
 	var minValue =  Number.MAX_VALUE;
@@ -651,6 +671,9 @@ GridAnalysis.prototype.brushCells = function(cells)
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
 {
+	// collect data points with timeseries
+	var dataPoints = [];
+
 	// cancel any de-highlight after this
 	this.unbrushReset = undefined;
 	this.newClusterBrush = cluster;
@@ -667,6 +690,10 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		if (r > i) r=i;
 		if (s < i) s=i;
 		brushedIDs.push(index);
+		dataPoints.push({
+			id: index,
+			timeseries: this.getTimeseries(index)
+		});
 	}
 
 	// brush the similarity matrix
@@ -692,6 +719,9 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		ctx.stroke();
 	}
 
+	// brush explore pane
+	this.explore.brushDataPoints(dataPoints);
+
 	// brush dendogram
 	this.simMatrix.highlightCluster(cluster, BRUSH_COLOR);
 
@@ -711,6 +741,9 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 		context.clearRect(0, 0, matrixCanvas.width, matrixCanvas.height);
 		context.drawImage(this.offscreenCanvas, 0, 0);
 	}
+
+	// unbrush explore pane
+	this.explore.brushDataPoints([]);
 
 	// unbrush dendogram
 	this.simMatrix.unhighlightCluster(cluster);

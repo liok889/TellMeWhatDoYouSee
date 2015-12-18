@@ -40,6 +40,11 @@ SimilarityMatrix.prototype.drawToCanvas = function(canvas, maxElements, fullMatr
 	var matrixLen = maxElements ? Math.min(maxElements, simMatrix.length) : simMatrix.length;
 	var ctx = canvas.getContext("2d");
 	var colorScale = d3.scale.quantize().domain([this.minSimilarity,1]).range(MATRIX_COLOR_SCALE);
+	
+	/* // Use log/power scale instead of linear ramp
+	var logScale = d3.scale.pow().domain([(this.minSimilarity)*1, (1)*1]).range([0, 1]);
+	var colorScale = d3.scale.quantize().domain([0, 1]).range(MATRIX_COLOR_SCALE);
+	*/
 
 	var y = 0;
 	for (var i = 0; i < matrixLen; i++, y += SIMMAT_ELEMENT_SIZE) 
