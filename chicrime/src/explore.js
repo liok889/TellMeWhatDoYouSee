@@ -241,12 +241,15 @@ SignalVis.prototype.updateMode = function()
 		break;
 	}
 
-	this.group.selectAll("g.individualSignalGroup").transition()
+	this.group.selectAll("g.individualSignalGroup")
 		.attr("visibility", visVector[0] ? "visible" : "hidden");
-	this.group.selectAll("g.averageSignalGroup").transition()
+	this.group.selectAll("g.averageSignalGroup")
 		.attr("visibility", visVector[1] ? "visible" : "hidden");
-	this.group.selectAll("g.diffSignalGroup").transition()
+	this.group.selectAll("g.diffSignalGroup")
 		.attr("visibility", visVector[2] ? "visible" : "hidden");
+	this.group.selectAll("g.brushSignalGroup")
+		.attr("visibility", visVector[2] ? "hidden" : "visible");
+
 }
 
 SignalVis.prototype.addSignal = function(selection)
@@ -427,7 +430,7 @@ SignalVis.prototype.updateSignals = function()
 
 	if (this.signals.length == 0) 
 	{
-		this.modeCircle.attr("visibility", "hidden");
+		this.modeCircle.attr("visibility", "visible");
 	}
 	else
 	{
@@ -444,14 +447,14 @@ SignalVis.prototype.updateSignals = function()
 	this.updateYAxis();
 }
 
-SignalVis.prototype.updateIndividualBrush = function(timeseries)
+SignalVis.prototype.updateBrushSignal = function(timeseries)
 {
-	var g = this.group.selectAll("g.individualBrush");
+	var g = this.group.selectAll("g.brushSignalGroup");
 	if (g.size() == 0) 
 	{
 		g = this.group.append("g")
 			.attr("transform", "translate(" + (SIGNAL_X_OFFSET + SIGNAL_PAD) + "," + (SIGNAL_PAD) + ")")
-			.attr("class", "individualBrush");
+			.attr("class", "brushSignalGroup");
 		g.append("path")
 			.style("stroke-dasharray", "2,2")
 			.attr("stroke", "white")
@@ -459,9 +462,27 @@ SignalVis.prototype.updateIndividualBrush = function(timeseries)
 			.attr("fill", "none")
 			.attr("d", "");
 	}
-	var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
-	g.select("path").attr("d", pathGenerator(timeseries.getSeries()));
-	putNodeOnTop(g.node());
+	
+	var path = g.select("path");
+	if (timeseries) {
+		var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
+		path.attr("d", pathGenerator( timeseries.getSeries() ));
+	}
+	else
+	{
+		path.attr("d", "");
+	}
+	//path.attr("visibility", this.mode == SIGNAL_DIFF ? "hidden" : "visible")
+	
+	if (this.mode == SIGNAL_DIFF && this.signals.length > 0)
+	{
+		this.calcDiffSignal(timeseries);
+		this.updateYAxis();
+	}
+	else
+	{
+		putNodeOnTop(g.node());
+	}
 }
 
 SignalVis.prototype.brushSignal = function(_signal)
@@ -536,7 +557,7 @@ SignalVis.prototype.calcAvgSignal = function()
 
 }
 
-SignalVis.prototype.calcDiffSignal = function(otherSignal)
+SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 {
 	// make / select groups
 	var diffGroup = this.group.selectAll("g.diffSignalGroup");
@@ -555,21 +576,22 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 			.attr("y1", (SIGNAL_H-2*SIGNAL_PAD) / 2 + SIGNAL_PAD)
 			.attr("x2", SIGNAL_W-SIGNAL_PAD)
 			.attr("y2", (SIGNAL_H-2*SIGNAL_PAD) / 2 + SIGNAL_PAD)
-			.attr("stroke", "white")
-			.attr("stroke-width", "1px")
-			.style("shape-rendering", "crispEdges");
+			.attr("stroke", "#cccccc")
+			.attr("stroke-width", "0.5px");
 
 	}
 	else
 	{
 		g = diffGroup.selectAll("g.diffPaths")
-		//g.selectAll("path").remove();
 	}
 
 	var A = this.avgSeries;
-	var B = (otherSignal || this.opposingSignal);
+	var B = this.opposingSignal;
 	if (B) {
 		B = B.getAvgTimeseries();
+	}
+	if (otherTimeseries) {
+		B = otherTimeseries;
 	}
 
 	var paths = [];
@@ -577,7 +599,7 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 	{
 		
 		// nothing to plot here
-		
+		g.selectAll("path").remove();
 	}
 	else
 	{
@@ -634,7 +656,7 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 
 		var yRange = Math.max( Math.abs(minV), Math.abs(maxV) );
 		yRange = Math.ceil(yRange* 10) / 10;
-		yRange = Math.max(yRange, 0.2);
+		yRange = Math.max(yRange, 0.5);
 		this.yDiffRange = yRange;
 
 		var xScale = d3.scale.linear().domain([0, diffSeries.length-1]).range([SIGNAL_PAD, SIGNAL_W-SIGNAL_PAD]);
@@ -670,9 +692,14 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 	var enter = update.enter().append("path")
 		.attr("stroke", "white")
 		.attr("stroke-width", "1.5px")
-		.attr("d", function(path) { return path.baseD; })
-		.attr("fill", "none");
+		.attr("d", function(path) { return path.d; })
+		.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; });
 
+	update
+		.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; })
+		.attr("d", function(path) { return path.d; });
+	
+	/*
 	(function(update) {
 		update.transition().duration(50).attr("fill", "none");
 		setTimeout(function() {
@@ -681,11 +708,12 @@ SignalVis.prototype.calcDiffSignal = function(otherSignal)
 				.attr("d", function(path) { return path.d; });
 		}, 50);
 	})(update);
+	*/
 
 	
-	update.exit().transition()
-		.attr("d", function(path) { return path.baseD; })
-		.attr("fill", "none")
+	update.exit()//.transition()
+		//.attr("d", function(path) { return path.baseD; })
+		//.attr("fill", "none")
 		.remove();
 }
 
@@ -909,36 +937,44 @@ Explore.prototype.updateSelectionCallback = function(selection) {
 Explore.prototype.brushDataPoints = function(points)
 {
 	// average the time series
-	if (points.length > 0) 
+	var avgTimeseries = null;
+	if (points.length > 0)
 	{
-		var avg = new Timeseries();
+		avgTimeseries = new Timeseries();
 		for (var i=0, N=points.length; i<N; i++) {
-			avg.add( points[i].timeseries );
+			avgTimeseries.add( points[i].timeseries );
 		}
-		avg.multiplyScalar(1 / points.length);
-		avg.normalize();
-
-		// make this timeseries visible
-		for (var i=0, N=this.signalList.length; i<N; i++) 
-		{
-			this.signalList[i].updateIndividualBrush(avg);
-		}
-		this.svg.selectAll("g.individualBrush").attr("visibility", "visible");
-		this.reset = undefined;
+		avgTimeseries.multiplyScalar(1 / points.length);
+		avgTimeseries.normalize();
 	}
-	else
+
+	// make this timeseries visible
+	function updateSignals(signalList, avg)
 	{
-		(function(explore) 
+		for (var i=0, N=signalList.length; i<N; i++) 
 		{
+			signalList[i].updateBrushSignal(avg);
+		}
+	}
+
+	// update 
+	(function(explore, dataPoints, avg) {
+
+		if (dataPoints.length == 0) {
 			explore.reset = true;
 			setTimeout(function() {
-				if (explore.reset) {
-					explore.svg.selectAll("g.individualBrush").attr("visibility", "hidden");
-					explore.reset = undefined;
+				if (explore.reset)
+				{
+					updateSignals(explore.signalList, avg);
 				}
 			}, 200);
-		})(this)
-	}
+		}
+		else
+		{
+			explore.reset = undefined;
+			updateSignals(explore.signalList, avg);
+		}
+	})(this, points, avgTimeseries);
 }
 
 Explore.COLS = 1;

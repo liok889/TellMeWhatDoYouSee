@@ -654,12 +654,21 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 GridAnalysis.prototype.brushCells = function(cells)
 {
-	var brushedIDs = [];
+	var brushedIDs = [], dataPoints = [];
 	for (var i=0, len=cells.length; i < len; i++)
 	{
 		var cell = cells[i];
-		brushedIDs.push(  this.ij2index[ cell[0] ][ cell[1] ]  );
+		var index = this.ij2index[ cell[0] ][ cell[1] ] 
+		brushedIDs.push( index );
+		dataPoints.push({
+			index: index,
+			timeseries: this.getTimeseries(index)
+		});
+
 	}
+
+	// brush explore pane
+	this.explore.brushDataPoints( dataPoints );
 
 	// brush similarity matrix as well
 	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
