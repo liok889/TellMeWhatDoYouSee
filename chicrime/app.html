@@ -384,6 +384,9 @@
 
 		}
 
+		DEFAULT_CENTER = [ 41.840920397579936, -87.67433166503906 ];
+		DEFAULT_ZOOM = 11;
+
 		function initializeMap()
 		{
 			L.mapbox.accessToken = 'pk.eyJ1IjoibGlvIiwiYSI6IlNaY2IzeUUifQ.qAjegKikOgTh4XJaPJ4fJw';
@@ -391,7 +394,7 @@
 			// see different mapbox styles:
 			// https://www.mapbox.com/developers/api/maps/
 			theMap = L.mapbox.map('map', 'mapbox.light', {fadeAnimation: true, inertia: false, zoomAnimation: false})
-				.setView([ 41.840920397579936, -87.67433166503906], 11);
+				.setView( DEFAULT_CENTER, DEFAULT_ZOOM );
 		
 			// get map pane (this will be the overlay layer)
 			mapPane = d3.select("#map").select("div.leaflet-map-pane");
@@ -479,8 +482,17 @@
 				.attr("x1", function(d) { return d; })
 				.attr("x2", function(d) { return d; });
 
-			// constrcut grid for GridAnalysis
+			// move map to default center / zoom-level
+			var center = theMap.getCenter();
+			var zoom = theMap.getZoom();
+			theMap.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+			
+			// construct the grid
 			gridAnalysis.constructGrid(cellSize, cellSize, rows.length+1, cols.length+1, GRID_OVERLAP);
+
+			// restore
+			theMap.setView(center, zoom);
+
 		}
 
 		function projectCity(geoFile)
