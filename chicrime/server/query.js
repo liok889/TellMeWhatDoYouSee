@@ -18,51 +18,78 @@ module.exports = {
 
 	aggregateCrimeCountOverGrid: function(query, callback)
 	{
+		// remove grid (we don't need that)
+		query.grid = undefined;
+
 		// connect and issue aggreaget query
 		connectToDB(function(db) 
 		{
-			var crimes = db.collection('crimes');
-			var analyses = db.collection('analyses');
-			
-			// construct a MongoDB aggregate query
-			var mongoQuery = constructAggregateQuery(query);
-
-			// perform query and collect results
-			executeAndCompile(db.collection('crimes'), mongoQuery.N, mongoQuery.stages, query, 
-				function (data, sums, total, listOfSeries)
-				{	
-					// perform analysis
-					var analysis = new Analysis(data, sums, total / listOfSeries.length, listOfSeries);
-						
-					analysis.filter();
-					analysis.calcSimilarityMatrix();
-					analysis.projectMDS();
-
-					// collect results
-					var results = {
-						timeseries: 		data,
-						aggregate: 			sums,
-						simMatrix: 			analysis.getSimMatrix(),
-						tsIndex: 			analysis.getTSIndex(),
-						mdsPositions: 		analysis.getMDSPositions()
-					};
-
-					// callback and return data
-					callback(results);
-					
-					// store analyses into database
-					query.grid = undefined;
-					query.results = results;
-					db.collection('analyses').insertOne(query, function(err, result) 
-					{
-						assert.equal(err, null);
-						db.close();
-					});
+			readPreviousResults(db.collection('analyses'), query, function(data) 
+			{
+				if (data)
+				{
+					// yay, we have previous results
+					callback(data.results);
 				}
-			);
+				else
+				{
+
+					// construct a MongoDB aggregate query
+					var mongoQuery = constructAggregateQuery(query);
+
+					// perform query and collect results
+					executeAndCompile(db.collection('crimes'), mongoQuery.N, mongoQuery.stages, query, 
+						function (data, sums, total, listOfSeries)
+						{	
+							// perform analysis
+							var analysis = new Analysis(data, sums, total / listOfSeries.length, listOfSeries);
+								
+							analysis.filter();
+							analysis.calcSimilarityMatrix();
+							analysis.projectMDS();
+
+							// collect results
+							var results = {
+								timeseries: 		data,
+								aggregate: 			sums,
+								simMatrix: 			analysis.getSimMatrix(),
+								tsIndex: 			analysis.getTSIndex(),
+								mdsPositions: 		analysis.getMDSPositions()
+							};
+
+							// callback and return data
+							callback(results);
+							
+							// store analyses into database
+							query.grid = undefined;
+							query.results = results;
+							db.collection('analyses').insertOne(query, function(err, result) 
+							{
+								assert.equal(err, null);
+								db.close();
+							});
+						}
+					);
+				}
+			});
 		});
 	}
 };
+
+function readPreviousResults(collection, query, callback)
+{
+	collection.findOne(query, function(err, document) {
+		assert.equal(err, null);
+		if (document) {
+			console.log("Found document with previous result!");
+		}
+		else
+		{
+			console.log("No previous result found");
+		}
+		callback(document);
+	})	
+}
 
 function executeAndCompile(_collection, _N, _stages, _query, _callback)
 {
