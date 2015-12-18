@@ -444,6 +444,26 @@ SignalVis.prototype.updateSignals = function()
 	this.updateYAxis();
 }
 
+SignalVis.prototype.updateIndividualBrush = function(timeseries)
+{
+	var g = this.group.selectAll("g.individualBrush");
+	if (g.size() == 0) 
+	{
+		g = this.group.append("g")
+			.attr("transform", "translate(" + (SIGNAL_X_OFFSET + SIGNAL_PAD) + "," + (SIGNAL_PAD) + ")")
+			.attr("class", "individualBrush");
+		g.append("path")
+			.style("stroke-dasharray", "2,2")
+			.attr("stroke", "white")
+			.attr("stroke-width", "1.5px")
+			.attr("fill", "none")
+			.attr("d", "");
+	}
+	var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
+	g.select("path").attr("d", pathGenerator(timeseries.getSeries()));
+	putNodeOnTop(g.node());
+}
+
 SignalVis.prototype.brushSignal = function(_signal)
 {
 	var pathSelection = this.group.selectAll("g.individualSignalGroup").selectAll("path");
@@ -886,11 +906,40 @@ Explore.prototype.updateSelectionCallback = function(selection) {
 	}
 }
 
-Explore.prototype.setSeriesLabels = function() {
+Explore.prototype.brushDataPoints = function(points)
+{
+	// average the time series
+	if (points.length > 0) 
+	{
+		var avg = new Timeseries();
+		for (var i=0, N=points.length; i<N; i++) {
+			avg.add( points[i].timeseries );
+		}
+		avg.multiplyScalar(1 / points.length);
+		avg.normalize();
 
+		// make this timeseries visible
+		for (var i=0, N=this.signalList.length; i<N; i++) 
+		{
+			this.signalList[i].updateIndividualBrush(avg);
+		}
+		this.svg.selectAll("g.individualBrush").attr("visibility", "visible");
+		this.reset = undefined;
+	}
+	else
+	{
+		(function(explore) 
+		{
+			explore.reset = true;
+			setTimeout(function() {
+				if (explore.reset) {
+					explore.svg.selectAll("g.individualBrush").attr("visibility", "hidden");
+					explore.reset = undefined;
+				}
+			}, 200);
+		})(this)
+	}
 }
-
-
 
 Explore.COLS = 1;
 Explore.ROWS = 2;

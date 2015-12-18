@@ -335,6 +335,9 @@ MDS.prototype.brushmove = function(hasNotMoved)
 		this.brushedSelection = undefined;
 	}
 
+	// brush exploratin pane
+	this.grid.brushExplore( brushedIDs );
+
 	// brush the heatmap and the matrix
 	this.grid.highlightHeatmapCell(brushedPoints, true);
 	this.grid.brushMatrixElements( brushedIDs );

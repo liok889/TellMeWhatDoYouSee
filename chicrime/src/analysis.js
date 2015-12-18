@@ -205,6 +205,12 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
 
+GridAnalysis.prototype.getTimeseries = function(index) 
+{
+	var cell = this.analysisResults.tsIndex[index];
+	return this.getGeoRect(cell).getTimeseries();
+}
+
 GridAnalysis.prototype.getGeoRect = function(c) {
 	return this.geoRectMap[ c[0] ][ c[1] ];
 }
@@ -508,6 +514,18 @@ GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
 	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
 }
 
+GridAnalysis.prototype.brushExplore = function(brushedIDs)
+{
+	var timeseries = [];
+	for (var i=0, N=brushedIDs.length; i<N; i++) {
+		timeseries.push({
+			id: brushedIDs[i],
+			timeseries: this.getTimeseries(brushedIDs[i])
+		});
+	}
+	this.explore.brushDataPoints(timeseries);
+}
+
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 {
 	var minValue =  Number.MAX_VALUE;
@@ -653,6 +671,9 @@ GridAnalysis.prototype.brushCells = function(cells)
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
 {
+	// collect data points with timeseries
+	var dataPoints = [];
+
 	// cancel any de-highlight after this
 	this.unbrushReset = undefined;
 	this.newClusterBrush = cluster;
@@ -669,6 +690,10 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		if (r > i) r=i;
 		if (s < i) s=i;
 		brushedIDs.push(index);
+		dataPoints.push({
+			id: index,
+			timeseries: this.getTimeseries(index)
+		});
 	}
 
 	// brush the similarity matrix
@@ -694,6 +719,9 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		ctx.stroke();
 	}
 
+	// brush explore pane
+	this.explore.brushDataPoints(dataPoints);
+
 	// brush dendogram
 	this.simMatrix.highlightCluster(cluster, BRUSH_COLOR);
 
@@ -713,6 +741,9 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 		context.clearRect(0, 0, matrixCanvas.width, matrixCanvas.height);
 		context.drawImage(this.offscreenCanvas, 0, 0);
 	}
+
+	// unbrush explore pane
+	this.explore.brushDataPoints([]);
 
 	// unbrush dendogram
 	this.simMatrix.unhighlightCluster(cluster);
