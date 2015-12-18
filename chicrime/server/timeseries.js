@@ -143,9 +143,74 @@ TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 	return matrix;
 }
 
-TimeSeriesDictionary.prototype.calcEquiprobablyBreaks = function()
+TimeSeriesDictionary.prototype.addToDistribution = function(timeseries)
 {
+	if (!EQUIPROBABLE_BREAKS) {
+		return;
+	}
+	else
+	{
+		// initialize distribution
+		if (!this.histogram) {
+			this.histogram = new Array(P_HIST_BINS);
+			for (var i=0; i<P_HIST_BINS; i++) {
+				this.histogram[i] = 0;
+			}
+			this.histCount = 0;
+			this.histList = [];
+			this.histMin = Number.MAX_VALUE;
+			this.histMax = -Number.MAX_VALUE;
+		}
 
+		for (var i=0, N=timeseries.length; i<N; i++) 
+		{
+			var v = timeseries[i];
+			if (v > this.histMax) {
+				this.histMax = v;
+			}
+			else if (v < this.histMin) {
+				this.histMin = v;
+			}
+		}
+		this.histCount++;
+		this.histList.push(timeseries);
+	}
+}
+
+TimeSeriesDictionary.prototype.calcEquiprobableBreaks = function()
+{
+	if(!EQUIPROBABLE_BREAKS) {
+		return;
+	}
+	else
+	{
+		var histogram = this.histogram;
+		var histMin = this.histMin;
+		var histMax = this.histMax;
+		var histList = this.histList;
+		var histDiff = histMax - histMin;
+		var histStep = histDiff / P_HIST_BINS;
+		var totalHits = 0;
+
+		// loop through hist list
+		for (var i=0, K=histList.length; i<K; i++) 
+		{
+			var timeseries = histList[i];
+			for (var j=0, N=timeseries.length; j<N; j++) 
+			{
+				var v = (timeseries[j] - histMin) / histDiff;
+				var bin = Math.min(Math.floor(v * (P_HIST_BINS)), P_HIST_BINS-1);
+				histogram[bin]++;
+			}
+		}
+
+		// total hits
+		for (var i=0, N=histogram.length; i<N; i++) {
+			totalHits += histogram[i];
+		}
+
+		// calculate equiprobably breakpoints
+	}
 }
 
 TimeSeriesDictionary.prototype.getBagOfStrings = function(data) 
