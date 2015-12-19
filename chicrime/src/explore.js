@@ -695,10 +695,12 @@ SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 		.attr("d", function(path) { return path.d; })
 		.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; });
 
+
 	update
 		.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; })
-		.attr("d", function(path) { return path.d; });
-	
+		.attr("d", function(path) { return path.d; })
+		.attr("fill-opacity", otherTimeseries ? "0.65" : "")
+		.style("stroke-dasharray", otherTimeseries ? "2,2" : "");	
 	/*
 	(function(update) {
 		update.transition().duration(50).attr("fill", "none");
@@ -813,7 +815,6 @@ Explore.prototype.setAxis = function(aggregation)
 	}
 	else
 	{
-		console.log("\tsetAxis, aggregation: " + aggregation);
 		var xScale = d3.scale.linear(), yScale = d3.scale.linear();
 		var labels;
 		var xAxis = d3.svg.axis().orient("bottom"), yAxis = d3.svg.axis();

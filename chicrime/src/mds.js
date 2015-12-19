@@ -5,7 +5,7 @@
  */
 
 // constants
-var MDS_POINT_RADIUS = 4.5;
+var MDS_POINT_RADIUS = 3.5;
 var MDS_PADDING = 10;
 
 /* =======================
