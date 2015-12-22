@@ -66,6 +66,10 @@ MDS.prototype.getMDSDomains = function() {
 	};
 }
 
+MDS.prototype.getBrushedIDs = function() {
+	return this.brushedIDs;
+}
+
 MDS.prototype.getViewport = function() {
 	return [this.w - MDS_PADDING*2, this.h - MDS_PADDING*2];
 }
@@ -130,11 +134,6 @@ MDS.prototype.createBrush = function()
 			});
 		
 		thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
-		d3.select("#imgAddSelection")
-			.on("click", function() 
-			{
-				grid.makeBrushSelection(thisObject.brushedIDs);
-			});
 	})(this, gridAnalysis);
 
 }
@@ -148,6 +147,7 @@ MDS.prototype.deleteBrush = function()
 		this.brush = undefined;
 		this.brushCell = undefined;
 	}
+	d3.select("#imgAddSelection").style("visibility", "hidden");
 	this.brushedMDSPoints = undefined;
 	this.brushedIDs = undefined;
 }

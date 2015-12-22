@@ -79,20 +79,39 @@ function GridAnalysis(theMap, svgExplore)
 	// buttons to switch MDS view form MDS points to Small-Multipatterns
 	(function(thisGrid) {
 		var buttonCallbacks = [
-			{id: "imgShowMDS", callback: function() {
-				thisGrid.switchMDSPanel(SHOW_MDS);
-			}},
+			{
+				id: "imgShowMDS", 
+				callback: function() {
+					thisGrid.switchMDSPanel(SHOW_MDS);
+				}
+			},
 			
-			{id: "imgShowSmallMultipatterns", callback: function() {
-				thisGrid.switchMDSPanel(SHOW_SMALL_MULTIPATTERNS);
-			}}
+			{
+				id: "imgShowSmallMultipatterns", 
+				callback: function() {
+					thisGrid.switchMDSPanel(SHOW_SMALL_MULTIPATTERNS);
+				}
+			},
+
+			{
+				id: "imgAddSelection", 
+				callback: function() {
+					var brushedIDs = thisGrid.mds.getBrushedIDs();
+					thisGrid.makeBrushSelection(brushedIDs);
+				}
+			}
 		];
 
+		// active buttons
 		for (var i=0, N=buttonCallbacks.length; i<N; i++) {
 			var b = buttonCallbacks[i];
 			d3.select("#" + b.id)
+				.style("padding", "2px")
 				.on("click", b.callback)
-				.on("mouseover", function() { d3.select(this).style("border", "solid 1.5px red"); })
+				.on("mouseover", function() { 
+					d3.select(this)
+						.style("border", "solid 1.5px red"); 
+				})
 				.on("mouseout", function() { d3.select(this).style("border", "")});
 		}
 	})(this);
@@ -211,6 +230,7 @@ GridAnalysis.prototype.resetView = function(aggregate)
 {
 	this.selector.clearAll();
 	this.explore.clearAll(aggregate);
+	this.smallMultipatterns.clearAll();
 }
 
 // send the analysis reuest as a JSON request
