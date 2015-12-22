@@ -72,7 +72,7 @@ MDS.prototype.classic = function(distances, dimensions)
 	console.log("OK");
 
 	return ret.U.map(function(row) {
-		return numeric.mul(row, eigenValues).splice(0, dimensions);
+		return numeric.mul(row, eigenValues); //.splice(0, dimensions);
 	});
 }
 
@@ -164,6 +164,61 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	
 	// store reference to GridAnalysis
 	this.grid = gridAnalysis;
+	this.positions = positions;
+	this.distances = distances;
+}
+
+MDS.prototype.calcStress = function(_distances, _positions)
+{
+	var distances = _distances || this.distances;
+	var positions = _positions || this.positions;
+
+
+	var dE = [Number.MAX_VALUE, -Number.MAX_VALUE];
+	var pE = [Number.MAX_VALUE, -Number.MAX_VALUE];
+	var N = distances.length;
+	var mdsDistances = [];
+	mdsDistances.length = N;
+
+	for (var i=0; i<N; i++)
+	{
+		var p1 = positions[i];
+		var mdsDistRow = [];
+		mdsDistRow.length = i;
+
+		for (var j=0; j<i; j++) 
+		{
+
+			dE[0] = Math.min(dE[0], distances[i][j]);
+			dE[1] = Math.max(dE[1], distances[i][j]);
+			
+			// calc euclidean distance between i and j
+			var p2 = positions[j];
+			var dX = p1[0]-p2[0];
+			var dY = p1[1]-p2[1];
+			var dist = Math.sqrt(dX*dX + dY*dY);
+
+			pE[0] = Math.min(pE[0], dist);
+			pE[1] = Math.max(pE[1], dist);
+			mdsDistRow[j] = dist;
+		}
+		mdsDistances[i] = mdsDistRow;
+	}
+
+	dE[1] = dE[1]-dE[0];
+	pE[1] = pE[1]-pE[0];
+
+	var stress = 0;
+	for (var i=1; i<N; i++) {
+		for (var j=0; j<i; j++) {
+			var s = 
+				1*(distances[i][j]-dE[0]) / dE[1] -
+				1*(mdsDistances[i][j]-pE[0]) / pE[1];
+			stress += s;
+		}
+	}
+	console.log("MDS stress: " + stress + ", for N=" + N);
+	return stress;
 }
 
 MDS.prototype.applyColorMap = function(_excludeMap)
