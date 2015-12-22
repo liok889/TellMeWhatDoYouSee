@@ -62,12 +62,13 @@ function PatternVis(mds, svg, w, h)
 
 PatternVis.prototype.clearAll = function()
 {
-	this.group.selectAll("g").remove();
+	this.group.selectAll("g.smallMultipatterns").remove();
 }
 
 PatternVis.prototype.setVisibility = function(visible)
 {
-	this.group.selectAll("g.smallMultipatterns").attr("visibility", visible ? "visible" : "hidden")
+	this.group.selectAll("g.smallMultipatterns")
+		.attr("visibility", visible ? "visible" : "hidden")
 }
 
 PatternVis.prototype.remove = function()

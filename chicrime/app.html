@@ -366,22 +366,16 @@
 				gridAnalysis.setRangeLimit(YEAR_RANGE);
 
 				// make sure the
-				gridAnalysis.sendRequest(function(jsonResponse) 
+				gridAnalysis.sendRequest(function(success) 
 				{
 					// turn off load spinner
 					d3.select("#loadSpinner").style("visibility", "hidden");
 
 					// show heatmap of aggregate crimes
-					gridAnalysis.makeHeatmap(jsonResponse.aggregate, jsonResponse.timeseries);
-					SHOW_HEATMAP = true;
-					d3.select("#checkShowHeatmap").node().checked = true;
-					
-					// heirarhical clustering
-					gridAnalysis.hClustering();
-
-					// MDS analysis
-					gridAnalysis.drawMDS(d3.select("#svgMDS"));
-
+					if (success) {
+						SHOW_HEATMAP = true;
+						d3.select("#checkShowHeatmap").node().checked = true;
+					}
 				})
 			});
 

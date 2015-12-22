@@ -246,48 +246,75 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			data: JSON.stringify(jsonRequest),
 			success: function(response, textStatus, xhr) 
 			{
-				// reset the view
-				gridAnalysis.resetView( jsonRequest.signalAggregate );
-
 				// parse the JSON reponse we received
 				jsonResponse = JSON.parse(response);
 				gridAnalysis.analysisResults = jsonResponse;
 
-				// ma∂ke a proper (complete) distance matrix from
-				// the similarity matrix we received
-				gridAnalysis.analysisResults.distanceMatrix = symmetrizeSimMatrix(gridAnalysis.analysisResults.simMatrix);
+				// data ready
+				gridAnalysis.data_ready(jsonRequest);
 
-				// make an index to translate form row,col to id
-				ij2index = [];
-				index2ij = [];
-
-				// loop through all IDs
-				for (var i=0, len = jsonResponse.tsIndex.length; i < len; i++) 
-				{
-					var index = jsonResponse.tsIndex[i];
-					var r = index[0];
-					var c = index[1];
-
-					if (!ij2index[r]) 
-					{
-						ij2index[r] = [];
-					}
-					ij2index[r][c] = i;
-					index2ij.push([r, c]);
+				// callback to UI
+				if (callback) {
+					callback(jsonResponse);
 				}
-				gridAnalysis.ij2index = ij2index;
-				gridAnalysis.index2ij = index2ij;
-
-				// make a callback
-				if (callback) callback(jsonResponse);
 			},
 
 			error: function(xhr, textStatus, errorThrown) {
 				console.error("Error with Ajax GridAnalysis: " + textStatus);
+				if (callback) {
+					callback();
+				}
 			} 
 		})
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
+
+GridAnalysis.prototype.data_ready = function(request)
+{
+	var analysisResults = this.analysisResults;
+	analysisResults.distanceMatrix = symmetrizeSimMatrix(
+		this.analysisResults.simMatrix
+	);
+	
+	// make an index to translate form row,col to id
+	ij2index = [];
+	index2ij = [];
+
+	// loop through all IDs
+	for (var i=0, len = analysisResults.tsIndex.length; i < len; i++) 
+	{
+		var index = analysisResults.tsIndex[i];
+		var r = index[0];
+		var c = index[1];
+
+		if (!ij2index[r]) 
+		{
+			ij2index[r] = [];
+		}
+		ij2index[r][c] = i;
+		index2ij.push([r, c]);
+	}
+	
+	this.ij2index = ij2index;
+	this.index2ij = index2ij;
+
+	// reset the view
+	this.resetView( request.signalAggregate );
+	
+	// make heatmap
+	this.makeHeatmap(
+		analysisResults.aggregate, 		// aggregate crime couts for each cell
+		analysisResults.timeseries 		// crime time series for each cell
+	);
+
+	// heirarhical clustering
+	this.hClustering();
+
+	// MDS analysis
+	this.drawMDS(d3.select("#svgMDS"));
+
+
+}
 
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
