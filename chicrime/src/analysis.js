@@ -6,6 +6,9 @@
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
+var SHOW_MDS = 1;
+var SHOW_SMALL_MULTIPATTERNS = 2;
+
 function GridAnalysis(theMap, svgExplore)
 {
 	// store reference to the map
@@ -22,8 +25,7 @@ function GridAnalysis(theMap, svgExplore)
 	var gExplore = this.svgExplore.append("g");
 	this.explore = new Explore(gExplore);
 
-
-	// initialize callbacks 
+	// initialize callbacks for explore pane
 	(function(grid) 
 	{
 		grid.selector.setSelectionBrushCallback(function(ids) {
@@ -52,7 +54,69 @@ function GridAnalysis(theMap, svgExplore)
 		);
 	})(this);
 
+	// create MDS
+	var svgMDS = d3.select("#svgMDS"); var w = +svgMDS.attr("width"), h = +svgMDS.attr("height");
+	var MDSGroup = svgMDS.append("g")
+		.attr("class", "MDSGroup");
 
+	this.mds = new MDS(
+		MDSGroup,
+		w, h
+	);
+
+	// link MDS with selector
+	this.mds.setColorMap( this.selector.getColorMap() );
+	this.selector.setMDS(this.mds);
+
+	// create Small-MultiPatterns ()
+	var groupSmallMultipatterns = svgMDS.append("g").attr("class", "groupSmallMultipatterns");
+	this.smallMultipatterns = new PatternVis(
+		this.mds,
+		groupSmallMultipatterns,
+		w, h
+	);
+
+	// buttons to switch MDS view form MDS points to Small-Multipatterns
+	(function(thisGrid) {
+		var buttonCallbacks = [
+			{id: "imgShowMDS", callback: function() {
+				thisGrid.switchMDSPanel(SHOW_MDS);
+			}},
+			
+			{id: "imgShowSmallMultipatterns", callback: function() {
+				thisGrid.switchMDSPanel(SHOW_SMALL_MULTIPATTERNS);
+			}}
+		];
+
+		for (var i=0, N=buttonCallbacks.length; i<N; i++) {
+			var b = buttonCallbacks[i];
+			d3.select("#" + b.id)
+				.on("click", b.callback)
+				.on("mouseover", function() { d3.select(this).style("border", "solid 1.5px red"); })
+				.on("mouseout", function() { d3.select(this).style("border", "")});
+		}
+	})(this);
+}
+
+GridAnalysis.prototype.switchMDSPanel = function(view)
+{
+	var svg = d3.select("#svgMDS");
+	switch (view)
+	{
+	case SHOW_MDS:
+		svg.selectAll("g.MDSGroup").attr("visibility", "visible")
+		svg.selectAll("g.smallMultipatternsGroup").attr("visibility", "hidden");
+		this.mds.setVisibility(true);
+
+		break;
+
+	case SHOW_SMALL_MULTIPATTERNS:
+		svg.selectAll("g.MDSGroup").attr("visibility", "hidden")
+		svg.selectAll("g.smallMultipatternsGroup").attr("visibility", "visible");
+		this.mds.setVisibility(false);
+
+		break;
+	}
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -207,7 +271,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
-	var cell = this.analysisResults.tsIndex[index];
+	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
 	return this.getGeoRect(cell).getTimeseries();
 }
 
@@ -292,16 +356,8 @@ function drawTimeseries(timeseries, group)
 		.attr("d", lineFunction(data)); */
 }
 
-
 GridAnalysis.prototype.drawMDS = function(svg, width, height)
 {
-	// create a new MDS project object
-	if (!this.mds) {
-		this.mds = new MDS(svg);
-		this.mds.setColorMap( this.selector.getColorMap() );
-		this.selector.setMDS(this.mds);
-	}
-
 	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
 	{
 		// async MDS analysis

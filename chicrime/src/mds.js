@@ -9,14 +9,14 @@ var MDS_POINT_RADIUS = 3.5;
 var MDS_PADDING = 10;
 
 /* =======================
- * MDSPoint and MDS
+ * MDSPoint
  * =======================
  */
 
-function MDSPoint(coordinate, cell, _index) {
+function MDSPoint(coordinate, cell, _index) 
+{
 	this.coordinate = coordinate;
 	this.cell = cell;
-	this.p = [];
 	this.id = _index;
 }
 
@@ -28,10 +28,21 @@ MDSPoint.prototype.getCoordinate = function() {
 	return this.coordinate;
 }
 
+MDSPoint.prototype.getPixelCoordinate = function() {
+	return this.pCoordinate;
+}
+MDSPoint.prototype.getNormalizedCoordinate = function() {
+	return this.nCoordinate;
+}
+
 MDSPoint.prototype.getCell = function() {
 	return this.cell;
 }
 
+/* =======================
+ * MDS
+ * =======================
+ */
 function MDS(svg, width, height)
 {
 	this.svg = svg;
@@ -44,8 +55,22 @@ MDS.prototype.setColorMap = function(_colorMap) {
 	this.colorMap = _colorMap;
 }
 
-MDS.prototype.classic = function(distances, dimensions)
-{
+MDS.prototype.getPoints = function() {
+	return this.mdsPoints;
+}
+
+MDS.prototype.getMDSDomains = function() {
+	return {
+		xDomain: this.xDomain,
+		yDomain: this.yDomain
+	};
+}
+
+MDS.prototype.getViewport = function() {
+	return [this.w - MDS_PADDING*2, this.h - MDS_PADDING*2];
+}
+
+MDS.prototype.classic = function(distances, dimensions) {
 	dimensions = dimensions || 2;
 	
 	// square distances
@@ -76,10 +101,45 @@ MDS.prototype.classic = function(distances, dimensions)
 	});
 }
 
-MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions, gridAnalysis)
+
+MDS.prototype.createBrush = function()
 {
-	// remove an earlier MDS group and create a new one
-	this.svg.selectAll("g.mdsPointGroup").remove();
+	if (this.brush) {
+		return;
+	};
+
+	(function(thisObject, grid) {
+		
+		// create a scale for the brush
+		var x = d3.scale.identity().domain([0, thisObject.w]);
+		var y = d3.scale.identity().domain([0, thisObject.h]);
+			
+		// create a brush, if one does not already exist
+		thisObject.brush = d3.svg.brush();
+		thisObject.brush
+			.x(x)
+			.y(y)
+			.on("brushstart", function() {
+				thisObject.brushstart();
+			})
+			.on("brush", function() {
+				thisObject.brushmove();
+			})
+			.on("brushend", function() {
+				thisObject.brushend();
+			});
+		
+		thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
+		d3.select("#imgAddSelection")
+			.on("click", function() 
+			{
+				grid.makeBrushSelection(thisObject.brushedIDs);
+			});
+	})(this, gridAnalysis);
+
+}
+MDS.prototype.deleteBrush = function()
+{
 	if (this.brush) 
 	{
 		// remove brush
@@ -90,6 +150,13 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	}
 	this.brushedMDSPoints = undefined;
 	this.brushedIDs = undefined;
+}
+
+MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions, gridAnalysis)
+{
+	// remove an earlier MDS group and create a new one
+	this.svg.selectAll("g.mdsPointGroup").remove();
+	this.deleteBrush();
 
 	// create a new <g> for the MDS points
 	var group = this.svg.append("g")
@@ -117,55 +184,63 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 		// them to their corresponding cell in the map
 		points.push( new MDSPoint(p, cellIndex[i], i) );
 	}
+	this.xDomain = xDomain;
+	this.yDomain = yDomain;
+
+	var domainLen = [
+		xDomain[1]-xDomain[0],
+		yDomain[1]-yDomain[0]
+	];
+
+	// construct scales
 	var xScale = d3.scale.linear().domain(xDomain).range([0+MDS_PADDING, this.w-MDS_PADDING]);
 	var yScale = d3.scale.linear().domain(yDomain).range([0+MDS_PADDING, this.h-MDS_PADDING]);
 
-	(function(grid, g, dataPoints, xS, yS, thisObject) 
+	// set normalized / pixel coordinates
+	for (var i=0, N=points.length; i<N; i++) {
+		var p = points[i];
+		
+		// normalized coordinate
+		p.nCoordinate = [
+			(p.coordinate[0] - xDomain[0]) / domainLen[0],
+			(p.coordinate[1] - yDomain[0]) / domainLen[1]
+		];
+
+		// pixel coordinate
+		p.pCoordinate = [ xScale(p.coordinate[0]), yScale(p.coordinate[1]) ];
+	}
+
+	(function(grid, g, dataPoints, thisObject) 
 	{
 		// create circles
 		thisObject.mdsPointSelection = g.selectAll("circle").data(dataPoints).enter().append("circle")
 			.attr("class", "mdsCircle")
-			.attr("cx", function(d) { var x = xS(d.coordinate[0]); d.p[0] = x; return x; })
-			.attr("cy", function(d) { var y = yS(d.coordinate[1]); d.p[1] = y; return y; })
-			.attr("r", MDS_POINT_RADIUS)
-			.attr("id", function(d) { return "mds_circle_" + d.cell[0] + "_" + d.cell[1]; });
+			.attr("id", function(d) { return "mds_circle_" + d.getCell()[0] + "_" + d.getCell()[1]; })
+			.attr("cx", function(d) { return d.getPixelCoordinate()[0]; })
+			.attr("cy", function(d) { return d.getPixelCoordinate()[1]; })
+			.attr("r", MDS_POINT_RADIUS);
+	})(gridAnalysis, group, points, this);
 
-		// create the brush, if doesn't already exist
-		if (!thisObject.brush) 
-		{
-			// create a scale for the brush
-			var x = d3.scale.identity().domain([0, thisObject.w]);
-			var y = d3.scale.identity().domain([0, thisObject.h]);
-			
-			// create a brush, if one does not already exist
-			thisObject.brush = d3.svg.brush();
-			thisObject.brush
-				.x(x)
-				.y(y)
-				.on("brushstart", function() {
-					thisObject.brushstart();
-				})
-				.on("brush", function() {
-					thisObject.brushmove();
-				})
-				.on("brushend", function() {
-					thisObject.brushend();
-				});
-
-			thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
-			d3.select("#imgAddSelection")
-				.on("click", function() 
-				{
-					grid.makeBrushSelection(thisObject.brushedIDs);
-				});
-
-		}
-	})(gridAnalysis, group, points, xScale, yScale, this);
+	// create brush
+	this.createBrush();
 	
 	// store reference to GridAnalysis
 	this.grid = gridAnalysis;
 	this.positions = positions;
 	this.distances = distances;
+
+	// store copy of mds points
+	this.mdsPoints = points;
+}
+
+MDS.prototype.setVisibility = function(visible)
+{
+	if (!visible) {
+		this.deleteBrush();
+	}
+	else {
+		this.createBrush();
+	}
 }
 
 MDS.prototype.calcStress = function(_distances, _positions)
@@ -253,8 +328,10 @@ MDS.prototype.restoreColors = function()
 	}
 	else
 	{
-		this.mdsPointSelection.style("fill", "");
-		this.applyColorMap();
+		if (this.mdsPointSelection) {
+			this.mdsPointSelection.style("fill", "");
+			this.applyColorMap();
+		}
 	}	
 }
 
@@ -349,11 +426,13 @@ MDS.prototype.brushmove = function(hasNotMoved)
 		{
 			
 			var selection = svg.selectAll("circle");
-			var brushedSelection = selection.filter(function (d) {
+			var brushedSelection = selection.filter(function (d) 
+			{
+				var p = d.getPixelCoordinate();
 				var out = 
 
-					e[0][0] > d.p[0] || d.p[0] > e[1][0] ||
-					e[0][1] > d.p[1] || d.p[1] > e[1][1];
+					e[0][0] > p[0] || p[0] > e[1][0] ||
+					e[0][1] > p[1] || p[1] > e[1][1];
 
 				if (out) {
 					return false 
