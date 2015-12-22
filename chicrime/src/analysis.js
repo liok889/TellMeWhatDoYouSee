@@ -2,6 +2,7 @@
  * Grid-based analysis
  * ============================================
  */
+"use strict";
 
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
@@ -76,6 +77,9 @@ function GridAnalysis(theMap, svgExplore)
 		w, h
 	);
 
+	// set MDS panel mode
+	this.mdsView = SHOW_MDS;
+
 	// buttons to switch MDS view form MDS points to Small-Multipatterns
 	(function(thisGrid) {
 		var buttonCallbacks = [
@@ -119,20 +123,23 @@ function GridAnalysis(theMap, svgExplore)
 
 GridAnalysis.prototype.switchMDSPanel = function(view)
 {
+
 	var svg = d3.select("#svgMDS");
+	if (!view) {
+		view = this.mdsView;
+	}
+
 	switch (view)
 	{
 	case SHOW_MDS:
-		svg.selectAll("g.MDSGroup").attr("visibility", "visible")
-		svg.selectAll("g.smallMultipatternsGroup").attr("visibility", "hidden");
 		this.mds.setVisibility(true);
+		this.smallMultipatterns.setVisibility(false);
 
 		break;
 
 	case SHOW_SMALL_MULTIPATTERNS:
-		svg.selectAll("g.MDSGroup").attr("visibility", "hidden")
-		svg.selectAll("g.smallMultipatternsGroup").attr("visibility", "visible");
 		this.mds.setVisibility(false);
+		this.smallMultipatterns.setVisibility(true);
 
 		break;
 	}
@@ -226,10 +233,10 @@ GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
-GridAnalysis.prototype.resetView = function(aggregate) 
+GridAnalysis.prototype.resetView = function() 
 {
 	this.selector.clearAll();
-	this.explore.clearAll(aggregate);
+	this.explore.clearAll(this.analysisRequest.signalAggregate);
 	this.smallMultipatterns.clearAll();
 }
 
@@ -247,29 +254,28 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			success: function(response, textStatus, xhr) 
 			{
 				// parse the JSON reponse we received
-				jsonResponse = JSON.parse(response);
-				gridAnalysis.analysisResults = jsonResponse;
+				gridAnalysis.analysisResults = JSON.parse(response);
 
 				// data ready
-				gridAnalysis.data_ready(jsonRequest);
+				gridAnalysis.data_ready();
 
 				// callback to UI
 				if (callback) {
-					callback(jsonResponse);
+					callback(true);
 				}
 			},
 
 			error: function(xhr, textStatus, errorThrown) {
 				console.error("Error with Ajax GridAnalysis: " + textStatus);
 				if (callback) {
-					callback();
+					callback(false);
 				}
 			} 
 		})
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
 
-GridAnalysis.prototype.data_ready = function(request)
+GridAnalysis.prototype.data_ready = function()
 {
 	var analysisResults = this.analysisResults;
 	analysisResults.distanceMatrix = symmetrizeSimMatrix(
@@ -277,8 +283,8 @@ GridAnalysis.prototype.data_ready = function(request)
 	);
 	
 	// make an index to translate form row,col to id
-	ij2index = [];
-	index2ij = [];
+	var ij2index = [];
+	var index2ij = [];
 
 	// loop through all IDs
 	for (var i=0, len = analysisResults.tsIndex.length; i < len; i++) 
@@ -299,7 +305,7 @@ GridAnalysis.prototype.data_ready = function(request)
 	this.index2ij = index2ij;
 
 	// reset the view
-	this.resetView( request.signalAggregate );
+	this.resetView();
 	
 	// make heatmap
 	this.makeHeatmap(
@@ -311,9 +317,13 @@ GridAnalysis.prototype.data_ready = function(request)
 	this.hClustering();
 
 	// MDS analysis
-	this.drawMDS(d3.select("#svgMDS"));
+	this.drawMDS();
 
+	// Small-Multipatterns
+	this.smallMultipatterns.makeSimpleLayout(8, 4);
 
+	// activate view
+	this.switchMDSPanel();
 }
 
 GridAnalysis.prototype.getTimeseries = function(index) 
@@ -403,7 +413,7 @@ function drawTimeseries(timeseries, group)
 		.attr("d", lineFunction(data)); */
 }
 
-GridAnalysis.prototype.drawMDS = function(svg, width, height)
+GridAnalysis.prototype.drawMDS = function()
 {
 	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
 	{
@@ -426,6 +436,11 @@ GridAnalysis.prototype.drawMDS = function(svg, width, height)
 		this.analysisResults.mdsPositions,
 		this
 	);
+}
+
+GridAnalysis.prototype.drawSmallMultipatterns = function()
+{
+	this.smallMultipatterns.make
 }
 
 GridAnalysis.prototype.hClustering = function()
@@ -592,7 +607,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 {
 	if (cells && cells.length > 0) {
 
-		highlightMap = d3.map();
+		var highlightMap = d3.map();
 		for (var i = 0, len = cells.length; i < len; i++) {
 			var c = Array.isArray(cells[i]) ? cells[i] : cells[i].getCell();
 			highlightMap.set(c[0] + "_" + c[1], true);
@@ -761,7 +776,7 @@ GridAnalysis.prototype.brushCells = function(cells)
 	for (var i=0, len=cells.length; i < len; i++)
 	{
 		var cell = cells[i];
-		var index = this.ij2index[ cell[0] ][ cell[1] ] 
+		var index = this.ij2index[ cell[0] ][ cell[1] ];
 		brushedIDs.push( index );
 		dataPoints.push({
 			index: index,

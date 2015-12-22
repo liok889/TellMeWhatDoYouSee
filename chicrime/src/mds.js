@@ -237,9 +237,11 @@ MDS.prototype.setVisibility = function(visible)
 {
 	if (!visible) {
 		this.deleteBrush();
+		this.svg.attr("visibility", "hidden");
 	}
 	else {
 		this.createBrush();
+		this.svg.attr("visibility", "visible");
 	}
 }
 
