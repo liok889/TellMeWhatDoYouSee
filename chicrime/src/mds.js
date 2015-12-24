@@ -416,6 +416,9 @@ MDS.prototype.brushstart = function(_brushCell)
 
 MDS.prototype.brushmove = function(hasNotMoved) 
 {
+	if (!this.brush) { 
+		return; 
+	}
 	var e = this.brush.extent();
 	
 	var brushedPoints = [];
@@ -472,26 +475,27 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	}
 
 	// brush exploratin pane
-	this.grid.brushExplore( brushedIDs );
+	if (brushedIDs) {
+		this.grid.brushExplore( brushedIDs );
 
-	// brush the heatmap and the matrix
-	this.grid.highlightHeatmapCell(brushedPoints, true);
-	this.grid.brushMatrixElements( brushedIDs );
+		// brush the heatmap and the matrix
+		this.grid.highlightHeatmapCell(brushedPoints, true);
+		this.grid.brushMatrixElements( brushedIDs );
 
-	// store a list of MDS points we brushed
-	this.brushedMDSPoints = brushedPoints;
-	this.brushedIDs = brushedIDs;
+		// store a list of MDS points we brushed
+		this.brushedMDSPoints = brushedPoints;
+		this.brushedIDs = brushedIDs;
 
-	// apply selection color
-	this.applyColorMap(brushedIDs);
-
+		// apply selection color
+		this.applyColorMap(brushedIDs);
+	}
 	return brushedIDs;
 }
 
 // If the brush is empty, select all circles.
 MDS.prototype.brushend = function() 
 {
-	if (this.brush.empty()) {
+	if (this.brush && this.brush.empty()) {
 		this.svg.selectAll("circle").style("fill", "");		
 		this.applyColorMap();
 		d3.select("#imgAddSelection").style("visibility", "hidden");

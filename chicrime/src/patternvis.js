@@ -165,6 +165,5 @@ PatternVis.prototype.makeSimpleLayout = function(R, C)
 
 PatternVis.prototype.clusterMDS = function()
 {
-
 }
 

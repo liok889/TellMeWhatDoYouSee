@@ -5,11 +5,11 @@
  */
 
 var SELECTION_SERIAL = 1;
-function Selection(color, members, avgTimeseries, selector)
+function Selection(color, members, selector)
 {
 	this.selectionID = SELECTION_SERIAL++;
 	this.members = members;
-	this.avgTimeseries = avgTimeseries;
+	this.avgTimeseries = calcAvgTimeseries(members);
 	this.parentSelector = selector;
 	this.color = color;
 }
@@ -381,9 +381,6 @@ ClusterSelector.prototype.newSelection = function(members)
 		}
 	}
 
-	// average the time series
-	var avgTimeseries = calcAvgTimeseries(members);
-
 	// add a selection to the cluster group
 	var color = null;
 	if (ClusterSelector.SELECTION_COLORS.length > 0) {
@@ -394,7 +391,7 @@ ClusterSelector.prototype.newSelection = function(members)
 	}
 
 	// add to selection
-	var selection = new Selection(color, members, avgTimeseries, this);
+	var selection = new Selection(color, members, this);
 	this.selections.push( selection );
 
 	// update selections

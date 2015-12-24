@@ -36,7 +36,7 @@ function SimilarityMatrix(_svg, _floatingLenses)
 SimilarityMatrix.prototype.drawToCanvas = function(canvas, maxElements, fullMatrix)
 {
 	// render half of the matrix only
-	var simMatrix = this.clusteredMatrix ? this.clusteredMatrix : this.matrix;
+	var simMatrix = this.clusteredMatrix || this.matrix;
 	var matrixLen = maxElements ? Math.min(maxElements, simMatrix.length) : simMatrix.length;
 	var ctx = canvas.getContext("2d");
 	var colorScale = d3.scale.quantize().domain([this.minSimilarity,1]).range(MATRIX_COLOR_SCALE);
@@ -53,7 +53,7 @@ SimilarityMatrix.prototype.drawToCanvas = function(canvas, maxElements, fullMatr
 		var x = 0;
 		for (var j = 0; j < fence; j++, x += SIMMAT_ELEMENT_SIZE) 
 		{
-			ctx.fillStyle = colorScale(simMatrix[i][j]);
+			ctx.fillStyle = colorScale(i == j ? 1.0 : i > j ? simMatrix[i][j] : simMatrix[j][i]);
 			ctx.fillRect(x, y, SIMMAT_ELEMENT_SIZE, SIMMAT_ELEMENT_SIZE);
 		}
 	}
@@ -118,311 +118,6 @@ SimilarityMatrix.prototype.draw = function()
 
 	
 	this.brushGroup = this.g.append("g").attr("id", "matrixBrush").html(brushCode);
-}
-
-
-// *****************************************
-// Cluster
-// -----------------------------------------
-var CLUSTER_ID = 1;
-
-function Cluster(members)
-{
-	this.members = members;
-	this.clusterID = CLUSTER_ID++;
-	this.linkColor = null;
-	this.nodeColor = null;
-	this.selected = null;
-}
-
-Cluster.prototype.isDecendantOf = function(cluster) {
-
-	if (this.parent == cluster) {
-		return true;
-	}
-	else if (this.parent) {
-		return this.parent.isDecendantOf(cluster);
-	}
-	else {
-		return false;
-	}
-}
-
-Cluster.prototype.getID = function() {
-	return this.clusterID;
-}
-
-Cluster.prototype.getParent = function()
-{
-	return this.parent;
-}
-
-Cluster.prototype.getChildren = function() 
-{
-	if (this._children) {
-		return this._children;
-	} else {
-		return this.children;
-	}
-}
-
-Cluster.prototype.getMembers = function()
-{
-	return this.members;
-}
-
-Cluster.prototype.isExpanded = function()
-{
-	return this.children || !this._children;
-}
-
-
-Cluster.prototype.restoreChildrenColor = function(passedDown)
-{
-
-	if (this.nodeColor) 
-	{
-		this.highlightNode(this.nodeColor);
-		passedDown = this.nodeColor;
-	}
-	else if (passedDown === "") 
-	{
-		passedDown = this.resolveColor();
-	}
-	this.linkColor = passedDown;
-	
-	if (this.children) 
-	{
-		this.children[0].restoreChildrenColor(passedDown);
-		this.children[1].restoreChildrenColor(passedDown);
-		this.links[0].style("stroke", this.linkColor);
-		this.links[1].style("stroke", this.linkColor);
-	}
-
-	if (this.lens.vis)
-		this.lens.vis.rect.style("stroke", this.linkColor);
-}
-
-Cluster.prototype.expand = function()
-{
-	if (this._children) 
-	{
-		this.children = this._children;
-		this._children = null;
-	}
-}
-
-Cluster.prototype.resolveColor = function()
-{
-	if (this.nodeColor) {
-		return this.nodeColor;
-	}
-	else
-	{
-		var nodeColor = this.nodeColor;
-		var parent = this.getParent();
-		while (parent && !nodeColor) {
-			nodeColor = parent.nodeColor;
-			parent = parent.getParent();
-		}
-		return nodeColor;
-	}
-}
-
-Cluster.prototype.getLinkColor = function()
-{
-	return this.linkColor;
-}
-
-Cluster.prototype.getNodeColor = function()
-{
-	return this.nodeColor;
-}
-
-Cluster.prototype.highlightNode = function(color) 
-{
-	if (this.lens) 
-	{
-		this.lens.highlight(color ? color : this.nodeColor ? this.nodeColor : "white");
-		if (this.lens.vis)
-			this.lens.vis.rect.style("stroke", color ? color : this.nodeColor);
-	} 
-}
-
-Cluster.prototype.toggleNode = function() 
-{
-	if (this.children) 
-	{
-		// collapse node and remove its links
-		this._children = this.children;
-		this.children = null;
-		this.removeLinks();
-	}
-	else 
-	{
-		this.children = this._children;
-		this._children = null;
-		this.expand();
-	}
-}
-
-Cluster.prototype.isSelected = function() 
-{
-	return this.selected == true;
-}
-
-Cluster.prototype.toggleSelection = function(selectionColor)
-{
-	if (this.selected) 
-	{
-		// de-activate 
-		this.selected = false;
-		this.nodeColor = null;		
-		this.highlightNode(undefined);
-		this.recursiveSetLinkColor(this.resolveColor());
-	}
-	else
-	{
-		this.selected = true;
-		this.nodeColor = selectionColor;		
-		this.highlightNode(selectionColor)
-		
-		this.linkColor = selectionColor;
-		if (this.children) {
-			this.children[0].recursiveSetLinkColor(selectionColor);
-			this.children[1].recursiveSetLinkColor(selectionColor);
-		}
-	}
-}
-
-Cluster.prototype.recursiveSetLinkColor = function(linkColor)
-{
-	if (this.nodeColor) {
-		return;
-	}
-
-	if (this.children) 
-	{
-		if (this.links) {
-			this.links[0].style("stroke", linkColor);
-			this.links[1].style("stroke", linkColor);
-		}
-		this.children[0].recursiveSetLinkColor(linkColor);
-		this.children[1].recursiveSetLinkColor(linkColor);
-	}
-	this.linkColor = linkColor;
-
-	if (this.lens.vis)
-		this.lens.vis.rect.style("stroke", linkColor);
-
-}
-
-Cluster.prototype.removeLinks = function()
-{
-	if (this.links) 
-	{
-		this.links[0].remove();
-		this.links[1].remove();
-		this.links = undefined;
-
-		var children = this.getChildren();
-		children[0].removeLinks();
-		children[1].removeLinks();
-	}
-}
-
-
-Cluster.prototype.recursiveBrush = function(color, strokeWidth, linkColor)
-{
-	if (this.children) 
-	{
-		this.children[0].recursiveBrush(color, strokeWidth, linkColor);
-		this.children[1].recursiveBrush(color, strokeWidth, linkColor);
-
-		// color links
-		if (this.links) {
-			this.links[0].style("stroke", linkColor ? linkColor : this.linkColor ? this.linkColor : "");
-			this.links[1].style("stroke", linkColor ? linkColor : this.linkColor ? this.linkColor : "");
-		}
-	}
-	if (this.lens.vis) 
-	{
-		this.lens.vis.rect.style("stroke", linkColor ? linkColor : this.linkColor ? this.linkColor : "");
-	}
-}
-
-Cluster.prototype.getLens = function()
-{
-	return this.lens;
-}
-
-Cluster.prototype.featurizeAll = function()
-{
-	if (this.lens) {
-		this.lens.normalize();
-		this.lens.featurize();
-	}
-
-	var children = this.getChildren();
-	if (children) {
-		children[0].featurizeAll();
-		children[1].featurizeAll();
-	}
-}
-
-Cluster.prototype.intraclusterVariability = function( clusterAccessor )
-{
-	if (this.intraclusterVar) {
-		return this.intraclusterVar;
-	}
-	else {
-		var centroid = this.lens;
-		var all_variability = [];
-
-		var features = this.lens.getFeatures();
-		var featureCount = features.length;
-
-		for (var f=0; f < featureCount; f++)
-		{
-			var variability = [];
-			for (var i=0, len=this.members.length; i<len; i++) 
-			{
-				variability.push( features[f].distance( clusterAccessor(this.members[i]).lens.getFeature(f) ) );
-			}
-			all_variability.push( variability );
-		}
-		this.intraclusterVar = all_variability;
-		return all_variability;
-	}
-}
-
-Cluster.prototype.pairwiseVariability = function( clusterAccessor )
-{
-	if (this.pairwiseVar) {
-		return this.pairwiseVar;
-	}
-	else
-	{
-		var all_variability = [];
-		var featureCount = this.lens.getFeatures().length;
-
-		for (var f=0; f < featureCount; f++)
-		{
-			var variability = [];
-			for (var i=1, len=this.members.length; i<len; i++) 
-			{
-				for (var j=0; j<i; j++) 
-				{
-					var fI = clusterAccessor(this.members[i]).lens.getFeature(f);
-					var fJ = clusterAccessor(this.members[j]).lens.getFeature(f);
-					variability.push( fI.distance(fJ) );
-				}
-			}
-			all_variability.push( variability );
-		}
-		this.pairwiseVar = all_variability;
-		return all_variability;
-	}
 }
 
 // *****************************************
@@ -739,6 +434,23 @@ SimilarityMatrix.prototype.setDendogramVisibility = function(v)
 	this.dendogramVisibility = v;
 }
 
+SimilarityMatrix.prototype.updateMatrixWithResults = function(hcluster)
+{
+	this.matrix = hcluster.simMatrix;
+	this.clusters = hcluster.clusters;
+	this.minSimilarity = (hcluster.minSimilarity !== undefined) ? hcluster.minSimilarity : 0;
+	this.data2ij = hcluster.data2ij;
+	this.ij2data = hcluster.ij2data;
+
+	// layout dendogrm
+	this.layoutDendogram(this.clusters, 0);
+
+	// draw
+	if (this.svg) {
+		this.drawMatrix();
+	}
+}
+
 SimilarityMatrix.prototype.updateMatrix = function(matrix, _minSimilarity)
 {
 	this.matrix = matrix;
@@ -756,8 +468,11 @@ SimilarityMatrix.prototype.updateMatrix = function(matrix, _minSimilarity)
 
 	// cluster
 	this.clusterMatrix();
-	if (this.svg)
+
+	// draw
+	if (this.svg) {
 		this.drawMatrix();
+	}
 }
 
 SimilarityMatrix.prototype.drawMatrix = function()
@@ -801,7 +516,7 @@ SimilarityMatrix.prototype.layoutMatrix = function(cluster, order)
 	if (cluster.lens)
 		cluster.lens.normalize();
 	
-	var children = cluster.getChildren();
+	var children = cluster.children;
 	if (children)
 	{
 		// layout my children
@@ -824,7 +539,7 @@ SimilarityMatrix.prototype.highlightCluster = function(cluster, theColor)
 		cluster.dendogram.circle.attr("fill", theColor);
 
 	// do my children
-	var children = cluster.getChildren();
+	var children = cluster.children;
 	if (children) 
 	{
 		this.highlightCluster(children[0], theColor);
@@ -856,12 +571,12 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 	if (limit !== null && limit !== undefined && cluster.dendogram.depth <= limit)
 		return [myX, myY];
 
-	if (cluster.getChildren())
+	if (cluster.children)
 	{
 		// append an invisible rectangle for events
 		(function(thisCluster, thisMatrix, _myX)
 		{
-			var children = thisCluster.getChildren();
+			var children = thisCluster.children;
 			var child1 = children[0];
 			var child2 = children[1];
 
@@ -919,7 +634,7 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 		})(cluster, this, myX);
 		
 		// draw my children
-		var children = cluster.getChildren()
+		var children = cluster.children;
 		var c1 = this.drawDendogram(children[0], limit);
 		var c2 = this.drawDendogram(children[1], limit);
 
@@ -969,7 +684,7 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 
 SimilarityMatrix.prototype.layoutDendogram = function(cluster, depth)
 {
-	var children = cluster.getChildren();
+	var children = cluster.children;
 	if (children)
 	{
 		var c1 = this.layoutDendogram(children[0], depth);

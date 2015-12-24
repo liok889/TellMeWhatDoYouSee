@@ -313,14 +313,22 @@ GridAnalysis.prototype.data_ready = function()
 		analysisResults.timeseries 		// crime time series for each cell
 	);
 
-	// heirarhical clustering
-	this.hClustering();
+	// clustering
+	var clustering = new Clustering(analysisResults.distanceMatrix);
+	clustering.hierarchical();
+	this.renderSimMatrix(
+	{
+		simMatrix: clustering.getClusteredSimMatrix(),
+		clusters: clustering.getHClusters(),
+		data2ij: clustering.get_data2ij(),
+		ij2data: clustering.get_ij2data()
+	});
 
 	// MDS analysis
 	this.drawMDS();
 
 	// Small-Multipatterns
-	this.smallMultipatterns.makeSimpleLayout(8, 4);
+	this.smallMultipatterns.makeSimpleLayout(7, 6);
 
 	// activate view
 	this.switchMDSPanel();
@@ -443,55 +451,16 @@ GridAnalysis.prototype.drawSmallMultipatterns = function()
 	this.smallMultipatterns.make
 }
 
-GridAnalysis.prototype.hClustering = function()
+GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 {
-	// normalize matrix
-	var matrix = this.analysisResults.distanceMatrix;
-	var nMatrix = [];
-
-	// figure extents
-	var maxDistance = -Number.MAX_VALUE;
-	var minDistance = Number.MAX_VALUE;
-
-	for (var i=0, len=matrix.length; i<len; i++) {
-		var row = [];
-		for (var j=0; j<len; j++) {
-			if (i == j) {
-				row.push(0);
-			}
-			else
-			{
-				var v = matrix[i][j];
-				if (maxDistance < v) maxDistance = v;
-				if (minDistance > v) minDistance = v;
-				row.push(v);
-			}
-		}
-		nMatrix.push(row);
-	}
-
-	var diffDistance = maxDistance - minDistance;
-
-	for (var i=0, len=nMatrix.length; i<len; i++) 
-	{
-		for (var j=0; j<len; j++) 
-		{
-			// simiarity = 1.0 - distance
-			nMatrix[i][j] = 1.0 - ((nMatrix[i][j]-minDistance) / diffDistance);
-		}
-		nMatrix[i][i] = 1.0;
-	}
-
 	// set dimensions for matrix elements / dendogram, based on dimensions of the canvas
 	this.onscreenCanvas = document.getElementById('canvasMatrix');
 	var dim = Math.min(+this.onscreenCanvas.width, +this.onscreenCanvas.height);
 	dim -= GridAnalysis.MATRIX_ELEMENT_BRUSH;
 
-	SIMMAT_ELEMENT_SIZE = dim / nMatrix.length;
+	SIMMAT_ELEMENT_SIZE = dim / hcluster.simMatrix.length;
 	SIMMAT_ELEMENT_BORDER = "none";
 	DENDOGRAM_NODE_HEIGHT = 5;
-		//simMatrix.getDendogramDepth() / (d3.select("#svgDendogram").attr("width") - 15);
-		//4*SIMMAT_ELEMENT_SIZE/2 + 1;
 
 	// remove any previous dendogram
 	d3.select("#svgDendogram").selectAll("g.dendogramGroup").remove();
@@ -504,8 +473,8 @@ GridAnalysis.prototype.hClustering = function()
 	this.simMatrix.setDendogramVisibility(true);
 	//this.simMatrix.dendogramLimit = 3;
 			
-	// update the similarity matrix 
-	this.simMatrix.updateMatrix(nMatrix);
+	// update the similarity matrix
+	this.simMatrix.updateMatrixWithResults(hcluster)
 
 	// render queue
 	var canvasQ = queue();
