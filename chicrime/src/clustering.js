@@ -4,6 +4,9 @@
  * ============================================
  */
 
+var DEFAULT_K = 10;
+var MAX_ITERATIONS = 200;
+
 function Clustering(distanceMatrix)
 {
 	var minD = Number.MAX_VALUE;
@@ -18,7 +21,7 @@ function Clustering(distanceMatrix)
 	for (var i=0; i<N; i++) 
 	{
 		var row = [];
-		row.length = i;
+		row.length = N;
 		for (var j=0; j<i; j++) 
 		{
 			var d = distanceMatrix[i][j];
@@ -27,15 +30,20 @@ function Clustering(distanceMatrix)
 			} else if (d < minD) {
 				minD = d;
 			}
-			row[j] = d;
+			//row[j] = d;
 		}
 		nDistanceMatrix[i] = row;
 	}
 	var diffD = maxD-minD;
 
-	for (var i=0; i<N; i++) {
+	for (var i=0; i<N; i++) 
+	{
 		for (var j=0; j<i; j++) {
-			nDistanceMatrix[i][j] = (nDistanceMatrix[i][j]-minD) / diffD;
+			nDistanceMatrix[i][j] = (distanceMatrix[i][j]-minD) / diffD;
+		}
+		nDistanceMatrix[i][i] = 0;
+		for (var j=i+1; j<N; j++) {
+			nDistanceMatrix[i][j] = (distanceMatrix[j][i]-minD) / diffD;
 		}
 	}
 
@@ -237,7 +245,205 @@ Clustering.prototype.makeClusteredSimMatrix = function()
 	}
 }
 
-Clustering.prototype.adaptiveKMeans = function()
+Clustering.prototype.kMedoids = function(_K)
 {
+	var K = _K || DEFAUKT_K;
+	var N = this.distanceMatrix.length;
+	var distanceMatrix = this.distanceMatrix;
+	var startTime = new Date();
 
+	// initial cluster list and unassigned members
+	var clusterList = [];
+	var unassigned = [];
+
+	// populate unassigned list with all data points
+	unassigned.length = N;
+	for (var i=0; i<N; i++) {
+		unassigned[i] = i;
+	}
+
+	// assign data points to the initial K clusters
+	while (clusterList.length < K) 
+	{
+		var i = Math.min(unassigned.length-1, Math.floor(Math.random() * unassigned.length));
+		clusterList.push({ medoid: unassigned[i], members: [] });
+		unassigned.splice(i, 1);
+	}
+
+	// assign points left to the cluster with closest medoid
+	for (var i=0, M=unassigned.length; i<M; i++) 
+	{
+		var e = unassigned[i];
+		var minI = 0;
+		var minC = clusterList[0];
+		var minD = distanceMatrix[minC.medoid][e];
+
+		for (var k=1, K=clusterList.length; k<K; k++) 
+		{
+			var cluster = clusterList[k];
+			var d = distanceMatrix[cluster.medoid][e];
+			if (d < minD || (d == minD && Math.random() > 0.5))
+			{
+				minC = cluster; minD = d;
+				minI = k;
+			}
+		}
+		minC.members.push(e);
+	}
+	unassigned = [];
+
+	var oldCost = null, totalCost = null, costDeltaStable = 0;
+	var iteration = 0;
+
+	while (iteration++ < MAX_ITERATIONS) 
+	{
+
+		var medoidShifted = 0;		// how many medoids have shifted
+		var moves = 0;				// how many elements moved to different clusters
+		totalCost = 0;
+
+		// loop through all clusters and elect a new medoid
+		for (var k=0, K=clusterList.length; k<K; k++) 
+		{
+			var cluster = clusterList[k];
+			var allMembers = cluster.members.concat(cluster.medoid);
+			var minCost = null, minI = null;
+			var comparisons = 0;
+
+			for (var i=0, len=allMembers.length; i<len; i++) 
+			{
+				var m = allMembers[i];
+				var cost = 0;
+				for (var j=0; j<len; j++) 
+				{
+					cost += i == j ? 0 : distanceMatrix[m][allMembers[j]];
+					comparisons++;
+				}
+				if (minI === null || cost < minCost) 
+				{
+					minI = i;
+					minCost = cost;
+				}
+			}
+
+			// elect a new medoid
+			var medoid = allMembers[minI];
+			var shifted = false;
+			if (cluster.medoid != medoid) 
+			{
+				allMembers.splice(minI, 1);
+				cluster.medoid = medoid;
+				cluster.members = allMembers;
+				medoidShifted++;
+				shifted = true;
+			}
+			//console.log("\t\tCluster: " + k + ", minCost: " + minCost + 'minI: ' + minI + ', shifted: ' + shifted + ', comparisons: ' + comparisons)
+
+			totalCost += minCost;
+		}
+
+		// loop through all clusters and try to find a new home for peripheral members
+		var moveList = [];
+		for (var k=0, K=clusterList.length; k<K; k++) 
+		{
+			var cluster = clusterList[k];
+			var members = cluster.members;
+
+			// loop through members of cluster
+			for (var i=0; i < members.length; i++) 
+			{
+				// see if there's a better home for this member
+				var m = members[i];
+				
+				/*
+				  Possible bug in V8 here: i exceeds members.length
+				  when test is performed against a local loop variable
+				  e.g., for (var i=0, M=members.length; i<M; i++)
+
+				if (!distanceMatrix[m]) {
+					console.log("Error: " + m)
+				}
+				*/
+
+				var oldD = distanceMatrix[m][cluster.medoid];
+				var curD = oldD;
+				var newHome = null;
+
+				// loop through all other clusters
+				for (var j=0; j<K; j++) 
+				{
+					if (j != k) 
+					{
+						var otherCluster = clusterList[j];
+						var d = distanceMatrix[m][otherCluster.medoid];
+
+						if (curD > d) 
+						{
+							curD = d;
+							newHome = otherCluster;
+						}
+
+					}
+				}
+
+				if (newHome) 
+				{
+					// add to move list
+					moveList.push(
+					{
+						from: cluster,
+						to: newHome,
+						index: i,
+						member: m
+					});
+					cluster.members.splice(i, 1);
+					i--;
+
+					// adjust total cost
+					totalCost = totalCost - oldD + curD;
+					moves++;
+				}
+			}
+		}
+
+		// deal with moves
+		for (var i=0, len = moveList.length; i < len; i++) 
+		{
+			var move = moveList[i];
+			move.to.members.push( move.member );
+		}
+
+
+		// re-check all cluster members
+		var totalMembers = 0;
+		for (var k=0; k < clusterList.length; k++) {
+			totalMembers += clusterList[k].members.length;
+		}
+		console.log("member count: " + totalMembers);
+
+	
+		// check old cost vs. new cost
+		if (oldCost) 
+		{
+			var costDelta = totalCost - oldCost;
+			if (Math.abs(costDelta) < 0.005) {
+				costDeltaStable++;
+			} else {
+				costDeltaStable = 0;
+			}
+
+			console.log("\tItr: " + iteration + ", cost delta: " + costDelta + ", total: " + totalCost + ", new medoid: " + medoidShifted + ", new homes: " + moves + ", members: " + totalMembers);
+			if (costDeltaStable > 10) {
+				break;
+			}
+		}
+		oldCost = totalCost;
+	}
+	console.log("k-medoid took: " + (((new Date()).getTime() - startTime.getTime())/1000).toFixed(1) + " seconds.");
+	return totalCost;
+}
+
+// export Clustering if within NodeJS
+if (typeof module !== 'undefined') {
+	module.exports = Clustering;
 }

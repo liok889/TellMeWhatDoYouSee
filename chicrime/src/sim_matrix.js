@@ -123,7 +123,6 @@ SimilarityMatrix.prototype.draw = function()
 // *****************************************
 // SimilarityMatrix
 // -----------------------------------------
-
 SimilarityMatrix.prototype.clusterMatrix = function()
 {
 	function selectMin(distance)
@@ -702,7 +701,5 @@ SimilarityMatrix.prototype.layoutDendogram = function(cluster, depth)
 		};
 	}
 	return cluster.dendogram;
-
-
 }
 

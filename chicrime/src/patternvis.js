@@ -4,8 +4,6 @@
  * ================================================
  */
 
-"use strict";
-
 var MULTIPATTERNS_PAD = 4;
 var MULTIPATTERNS_CELL_W = 50;
 var MULTIPATTERNS_CELL_H = 30;

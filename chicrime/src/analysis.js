@@ -2,8 +2,6 @@
  * Grid-based analysis
  * ============================================
  */
-"use strict";
-
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
@@ -278,9 +276,9 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 GridAnalysis.prototype.data_ready = function()
 {
 	var analysisResults = this.analysisResults;
-	analysisResults.distanceMatrix = invertSimMatrix(this.analysisResults.simMatrix);
+	analysisResults.distanceMatrix = symmetrizeSimMatrix(this.analysisResults.simMatrix);
 	
-	// make an index to translate form row,col to id
+	// make an index to translate form geocoordinate to timeseries index
 	var ij2index = [];
 	var index2ij = [];
 
@@ -312,25 +310,25 @@ GridAnalysis.prototype.data_ready = function()
 	);
 
 	// clustering and render similarity matrix
-	var clustering = new Clustering(analysisResults.distanceMatrix);
-	if (analysisResults.hclusters) 
-	{
+	this.clustering = new Clustering(analysisResults.distanceMatrix);
+	var clustering = this.clustering;
+	if (analysisResults.hclusters) {
+		// hierarchical clustering already done by server
 		clustering.setHierarchicalClusters( analysisResults.hclusters )
 	}
-	else
-	{
+	else {
+		// do clustering
 		clustering.hierarchical();
 	}
 
 	// render matrix
 	this.renderSimMatrix(
 	{
-		simMatrix: clustering.getClusteredSimMatrix(),
-		clusters: clustering.getHClusters(),
-		data2ij: clustering.get_data2ij(),
-		ij2data: clustering.get_ij2data()
+		simMatrix: 	clustering.getClusteredSimMatrix(),	// similarity matrix
+		clusters: 	clustering.getHClusters(),			// clusters
+		data2ij: 	clustering.get_data2ij(),			// indices
+		ij2data: 	clustering.get_ij2data()
 	});
-	this.clustering = clustering;
 
 	// MDS analysis
 	this.drawMDS();
@@ -425,8 +423,6 @@ function drawTimeseries(timeseries, group)
 		.attr("stroke", "black")
 		.style("stroke-width", "1px")
 		.style("fill", "none");
-/*		.transition()
-		.attr("d", lineFunction(data)); */
 }
 
 GridAnalysis.prototype.drawMDS = function()
