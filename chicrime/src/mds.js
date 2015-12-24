@@ -233,6 +233,52 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	this.mdsPoints = points;
 }
 
+MDS.prototype.drawConvexHull = function(clusters)
+{
+
+	// remove existing hull group
+	this.svg.selectAll("g.mdsConvexHullGroup").remove();
+	var group = this.svg.append("g")
+		.attr("class", "mdsConvexHullGroup");
+
+	var convexHulls = [];
+	for (var i=0, K=clusters.length; i<K; i++)
+	{
+		var cluster = clusters[i];
+		var members = cluster.members;
+		var hull = new ConvexHullGrahamScan();
+
+		for (var j=0, M=members.length; j<M; j++) 
+		{
+			var m = members[j];
+			var p = this.mdsPoints[m].getPixelCoordinate();
+			hull.addPoint(p[0], p[1]);
+		}
+
+		// compute the hull and add it to the list of hulls
+		var hullPoints = hull.getHull();
+		convexHulls.push( hullPoints );
+	}
+
+	var pathGenerator = d3.svg.line()
+		.x(function(d) { return d.x; })
+		.y(function(d) { return d.y; })
+		.interpolate("cardinal-closed");
+
+	group.selectAll("path").data(convexHulls).enter().append("path")
+		.attr("d", function(d) { return pathGenerator(d); })
+		.style("stroke", "#ff9933")
+		.style("stroke-width", "2px")
+		.style("fill", "#ff9933")
+		.style("fill-opacity", "0.1")
+		.on("mouseover", function(d) {
+			d3.select(this).style("fill-opacity", "")
+		})
+		.on("mouseout", function(d) {
+			d3.select(this).style("fill-opacity", "0.1");
+		});
+}
+
 MDS.prototype.setVisibility = function(visible)
 {
 	if (!visible) {

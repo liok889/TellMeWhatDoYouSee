@@ -21,6 +21,8 @@
 	<script src='src/explore.js' type='text/javascript'></script>
 	<script src='src/patternvis.js' type='text/javascript'></script>
 	<script src='src/clustering.js' type='text/javascript'></script>
+	<script src='src/graham_scan.js' type='text/javascript'></script>
+
 	
 	<!-- local stylesheets -->
 	<link href='https://api.mapbox.com/mapbox.js/v2.2.2/mapbox.css' rel='stylesheet' />
@@ -259,14 +261,14 @@
 		var geodata = [];
 
 		// variables controllable by the UI
-		var GRID_LINE_COUNT = 30;
+		var GRID_LINE_COUNT = 55;
 		var GRID_OVERLAP = 0;
 		var SHOW_GRID = false;
 		var SHOW_COMMUNITIES = false;
 		var SHOW_HEATMAP = true;
 		var SHOW_CITY = true;
 		var MAP_OPACITY = 1.0;
-		var YEAR_RANGE = [2014, 2014];
+		var YEAR_RANGE = [2002, 2014];
 
 		// brush color
 		var BRUSH_COLOR = "#cc0000"
@@ -352,32 +354,7 @@
 			// run analysis
 			d3.select("#buttonRunAnalysis").on("click", function() 
 			{
-				// make load spinner visible
-				var spinner = d3.select("#loadSpinner").style("visibility", "visible");
-
-				// project the grid
-				projectGrid();
-
-
-				// set type of aggregation
-				var signalAggregate = $('input[name="signalAggregate"]:checked').val();
-				gridAnalysis.setSignalAggregate(signalAggregate);
-
-				// range the slider
-				gridAnalysis.setRangeLimit(YEAR_RANGE);
-
-				// make sure the
-				gridAnalysis.sendRequest(function(success) 
-				{
-					// turn off load spinner
-					d3.select("#loadSpinner").style("visibility", "hidden");
-
-					// show heatmap of aggregate crimes
-					if (success) {
-						SHOW_HEATMAP = true;
-						d3.select("#checkShowHeatmap").node().checked = true;
-					}
-				})
+				run_analysis();
 			});
 
 		}
@@ -651,6 +628,34 @@
  			addGeoObject({ type: "point", lat: lat, lon: lon, geom: circle });
  		}
 
+ 		function run_analysis()
+ 		{
+			// make load spinner visible
+			var spinner = d3.select("#loadSpinner").style("visibility", "visible");
+
+			// project the grid
+			projectGrid();
+
+			// set type of aggregation
+			var signalAggregate = $('input[name="signalAggregate"]:checked').val();
+			gridAnalysis.setSignalAggregate(signalAggregate);
+
+			// range the slider
+			gridAnalysis.setRangeLimit(YEAR_RANGE);
+
+			// make sure the
+			gridAnalysis.sendRequest(function(success) 
+			{
+				// turn off load spinner
+				d3.select("#loadSpinner").style("visibility", "hidden");
+
+				// show heatmap of aggregate crimes
+				if (success) {
+					SHOW_HEATMAP = true;
+					d3.select("#checkShowHeatmap").node().checked = true;
+				}
+			})
+ 		}
 
 		initializeMap();
 		makeSVG();
@@ -658,6 +663,11 @@
 		projectCity();
 		initUI();
 		projectGrid();
+
+		window.onload = function()
+		{
+			run_analysis();
+		}
 
 	</script>
 

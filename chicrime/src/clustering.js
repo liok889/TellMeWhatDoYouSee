@@ -428,9 +428,9 @@ Clustering.prototype.kMedoids = function(_K)
 		}
 		oldCost = totalCost;
 	}
-	console.log("mediod shifts: " + totalMedoidShift);
 	console.log("k-medoids took: " + (((new Date()).getTime() - startTime.getTime())/1000).toFixed(1) + " seconds.");
-	return totalCost;
+	console.log("mediod shifts: " + totalMedoidShift + ", totalCost: " + totalCost);
+	return clusterList;
 }
 
 // export Clustering if within NodeJS
