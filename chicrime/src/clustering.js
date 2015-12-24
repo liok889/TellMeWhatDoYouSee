@@ -5,7 +5,8 @@
  */
 
 var DEFAULT_K = 10;
-var MAX_ITERATIONS = 200;
+var MAX_ITERATIONS = 1000;		// max number of iterations
+var STABLE_ITERATIONS = 25;		// number of iterations before declaring stable (local minima) config
 
 function Clustering(distanceMatrix)
 {
@@ -247,9 +248,8 @@ Clustering.prototype.makeClusteredSimMatrix = function()
 
 Clustering.prototype.kMedoids = function(_K)
 {
-	var K = _K || DEFAUKT_K;
-	var N = this.distanceMatrix.length;
 	var distanceMatrix = this.distanceMatrix;
+	var K = Math.min(_K || DEFAUKT_K, distanceMatrix.length);
 	var startTime = new Date();
 
 	// initial cluster list and unassigned members
@@ -257,8 +257,8 @@ Clustering.prototype.kMedoids = function(_K)
 	var unassigned = [];
 
 	// populate unassigned list with all data points
-	unassigned.length = N;
-	for (var i=0; i<N; i++) {
+	unassigned.length = distanceMatrix.length;
+	for (var i=0; i<distanceMatrix.length; i++) {
 		unassigned[i] = i;
 	}
 
@@ -266,11 +266,11 @@ Clustering.prototype.kMedoids = function(_K)
 	while (clusterList.length < K) 
 	{
 		var i = Math.min(unassigned.length-1, Math.floor(Math.random() * unassigned.length));
-		clusterList.push({ medoid: unassigned[i], members: [] });
-		unassigned.splice(i, 1);
+		var e = unassigned.splice(i, 1)[0];
+		clusterList.push({ medoid: e, members: [] });
 	}
 
-	// assign points left to the cluster with closest medoid
+	// assign rest of the points to cluster with closest medoid
 	for (var i=0, M=unassigned.length; i<M; i++) 
 	{
 		var e = unassigned[i];
@@ -278,35 +278,34 @@ Clustering.prototype.kMedoids = function(_K)
 		var minC = clusterList[0];
 		var minD = distanceMatrix[minC.medoid][e];
 
-		for (var k=1, K=clusterList.length; k<K; k++) 
+		for (var c=1; c < K; c++) 
 		{
-			var cluster = clusterList[k];
+			var cluster = clusterList[c];
 			var d = distanceMatrix[cluster.medoid][e];
 			if (d < minD || (d == minD && Math.random() > 0.5))
 			{
 				minC = cluster; minD = d;
-				minI = k;
+				minI = c;
 			}
 		}
 		minC.members.push(e);
 	}
 	unassigned = [];
 
-	var oldCost = null, totalCost = null, costDeltaStable = 0;
+	var oldCost = null, totalCost = null, costDeltaStable = 0, totalMedoidShift = 0;
 	var iteration = 0;
 
 	while (iteration++ < MAX_ITERATIONS) 
 	{
-
 		var medoidShifted = 0;		// how many medoids have shifted
 		var moves = 0;				// how many elements moved to different clusters
 		totalCost = 0;
 
 		// loop through all clusters and elect a new medoid
-		for (var k=0, K=clusterList.length; k<K; k++) 
+		for (var c=0; c < K; c++) 
 		{
-			var cluster = clusterList[k];
-			var allMembers = cluster.members.concat(cluster.medoid);
+			var cluster = clusterList[c];
+			var allMembers = cluster.members.concat([cluster.medoid]);
 			var minCost = null, minI = null;
 			var comparisons = 0;
 
@@ -319,7 +318,7 @@ Clustering.prototype.kMedoids = function(_K)
 					cost += i == j ? 0 : distanceMatrix[m][allMembers[j]];
 					comparisons++;
 				}
-				if (minI === null || cost < minCost) 
+				if (minCost === null || cost < minCost) 
 				{
 					minI = i;
 					minCost = cost;
@@ -328,25 +327,23 @@ Clustering.prototype.kMedoids = function(_K)
 
 			// elect a new medoid
 			var medoid = allMembers[minI];
-			var shifted = false;
 			if (cluster.medoid != medoid) 
 			{
 				allMembers.splice(minI, 1);
 				cluster.medoid = medoid;
 				cluster.members = allMembers;
+
 				medoidShifted++;
-				shifted = true;
 			}
-			//console.log("\t\tCluster: " + k + ", minCost: " + minCost + 'minI: ' + minI + ', shifted: ' + shifted + ', comparisons: ' + comparisons)
 
 			totalCost += minCost;
 		}
 
 		// loop through all clusters and try to find a new home for peripheral members
 		var moveList = [];
-		for (var k=0, K=clusterList.length; k<K; k++) 
+		for (var c=0; c < K; c++) 
 		{
-			var cluster = clusterList[k];
+			var cluster = clusterList[c];
 			var members = cluster.members;
 
 			// loop through members of cluster
@@ -354,35 +351,23 @@ Clustering.prototype.kMedoids = function(_K)
 			{
 				// see if there's a better home for this member
 				var m = members[i];
-				
-				/*
-				  Possible bug in V8 here: i exceeds members.length
-				  when test is performed against a local loop variable
-				  e.g., for (var i=0, M=members.length; i<M; i++)
-
-				if (!distanceMatrix[m]) {
-					console.log("Error: " + m)
-				}
-				*/
-
-				var oldD = distanceMatrix[m][cluster.medoid];
+				var oldD = distanceMatrix[cluster.medoid][m];
 				var curD = oldD;
 				var newHome = null;
 
 				// loop through all other clusters
 				for (var j=0; j<K; j++) 
 				{
-					if (j != k) 
+					if (j != c) 
 					{
 						var otherCluster = clusterList[j];
-						var d = distanceMatrix[m][otherCluster.medoid];
+						var d = distanceMatrix[otherCluster.medoid][m];
 
-						if (curD > d) 
+						if (d < curD || (d == curD && Math.random() > 0.5)) 
 						{
 							curD = d;
 							newHome = otherCluster;
 						}
-
 					}
 				}
 
@@ -391,12 +376,12 @@ Clustering.prototype.kMedoids = function(_K)
 					// add to move list
 					moveList.push(
 					{
-						from: cluster,
 						to: newHome,
-						index: i,
 						member: m
 					});
-					cluster.members.splice(i, 1);
+
+					// move from current 
+					members.splice(i, 1);
 					i--;
 
 					// adjust total cost
@@ -412,34 +397,39 @@ Clustering.prototype.kMedoids = function(_K)
 			var move = moveList[i];
 			move.to.members.push( move.member );
 		}
-
-
-		// re-check all cluster members
-		var totalMembers = 0;
-		for (var k=0; k < clusterList.length; k++) {
-			totalMembers += clusterList[k].members.length;
-		}
-		console.log("member count: " + totalMembers);
-
 	
+		// keep track of how many total medoids have shifted during the run
+		totalMedoidShift += medoidShifted;
+
 		// check old cost vs. new cost
 		if (oldCost) 
 		{
 			var costDelta = totalCost - oldCost;
+			
+			/*
+			// print information to console
+			console.log(iteration + ":\t delta: " + 
+				(costDelta >= 0 ? " " : "") + costDelta.toFixed(3) + 
+				", total: " + totalCost.toFixed(3) + 
+				", medoids: " + medoidShifted + 
+				", moves: " + moves
+			);
+			*/
+
 			if (Math.abs(costDelta) < 0.005) {
 				costDeltaStable++;
 			} else {
 				costDeltaStable = 0;
 			}
 
-			console.log("\tItr: " + iteration + ", cost delta: " + costDelta + ", total: " + totalCost + ", new medoid: " + medoidShifted + ", new homes: " + moves + ", members: " + totalMembers);
-			if (costDeltaStable > 10) {
+			if (costDeltaStable > STABLE_ITERATIONS) {
 				break;
 			}
 		}
 		oldCost = totalCost;
 	}
-	console.log("k-medoid took: " + (((new Date()).getTime() - startTime.getTime())/1000).toFixed(1) + " seconds.");
+	console.log("mediod shifts: " + totalMedoidShift);
+	console.log("k-medoids took: " + (((new Date()).getTime() - startTime.getTime())/1000).toFixed(1) + " seconds.");
 	return totalCost;
 }
 
