@@ -278,9 +278,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 GridAnalysis.prototype.data_ready = function()
 {
 	var analysisResults = this.analysisResults;
-	analysisResults.distanceMatrix = symmetrizeSimMatrix(
-		this.analysisResults.simMatrix
-	);
+	analysisResults.distanceMatrix = invertSimMatrix(this.analysisResults.simMatrix);
 	
 	// make an index to translate form row,col to id
 	var ij2index = [];
@@ -313,9 +311,18 @@ GridAnalysis.prototype.data_ready = function()
 		analysisResults.timeseries 		// crime time series for each cell
 	);
 
-	// clustering
+	// clustering and render similarity matrix
 	var clustering = new Clustering(analysisResults.distanceMatrix);
-	clustering.hierarchical();
+	if (analysisResults.hclusters) 
+	{
+		clustering.setHierarchicalClusters( analysisResults.hclusters )
+	}
+	else
+	{
+		clustering.hierarchical();
+	}
+
+	// render matrix
 	this.renderSimMatrix(
 	{
 		simMatrix: clustering.getClusteredSimMatrix(),
@@ -323,6 +330,7 @@ GridAnalysis.prototype.data_ready = function()
 		data2ij: clustering.get_data2ij(),
 		ij2data: clustering.get_ij2data()
 	});
+	this.clustering = clustering;
 
 	// MDS analysis
 	this.drawMDS();
@@ -881,6 +889,19 @@ function symmetrizeSimMatrix(matrix)
 		}
 	}
 	return matrix;
+}
+
+function invertSimMatrix(matrix)
+{
+	var n = matrix.length;
+	for (var i=0; i<n; i++) 
+	{
+		for (var j=0; j<i; j++) 
+		{
+			matrix[i][j] *= -1;
+		}
+	}
+	return matrix;	
 }
 
 function testSymmetry(matrix) {
