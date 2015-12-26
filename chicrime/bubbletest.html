@@ -55,8 +55,8 @@
 
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
-		var setSize = [7, 10];	// min/max size of set
-		var resolution = .25;	// resolution of bubble set's energy field (relative to size of canvas)
+		var setSize = [20, 25];	// min/max size of set
+		var resolution = .15;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
 		var canvas = d3.select("#bubbleCanvas");
@@ -65,52 +65,184 @@
 		// make a group to hold the edges
 		var edgeGroup = svg.append("g");
 
+
 		// generate random points
 		var points = [];
-		for (var i=0; i<N; i++) {
+
+		// add a bunch more points
+		for (var i=0; i < 80; i++) {
 			var x = Math.random() * (w-2*padding) + padding;
 			var y = Math.random() * (h-2*padding) + padding;
 			points.push({
-				0: x, 1: y,
 				x: x, y: y
 			});
 		}
 
+		// assign a random number of set elements
 		var setN = Math.floor(Math.random() * (setSize[1]-setSize[0])) + setSize[0];
-		setN = Math.max(setN, setSize[1]);
-		console.log("\tSet size: " + setN);
 		var set = [];
 		for (var i=0; i < setN; i++) {
 			set.push(i);
 		}
 
-		svg.selectAll("circle").data(points).enter().append("circle")
+		// the rest are obstacles
+		var obstacles = [];
+		for (var i=setN; i<points.length; i++) {
+			obstacles.push(i);
+		}
+
+
+		/*
+		svg.selectAll("circle").data(obstacles).enter().append("circle")
 			.attr("class", "point")
-			.attr("cx", function(d) { return d.x; })
-			.attr("cy", function(d) { return d.y; });
-		
+			.attr("cx", function(d) { return points[d].x; })
+			.attr("cy", function(d) { return points[d].y; });
+		*/
+
+		/*
 		svg.on("mousemove", function() {
 			var mouse = d3.mouse(this);
 			testEdgeIntersect({x: mouse[0], y: mouse[1]});
 		}).on("mouseout", function() {
 			svg.select("#mouseCircle").remove();
 		});
+		*/
 
+		// measure time
+		var startTime = new Date();
 		// bubble set calculation
-		var allSets = [{ members: set }];
-		var bubbles = new BubbleSets(allSets, points, w, h, resolution, [10, 40]);
+		var allSets = [{ members: set }, {members: obstacles}];
+		var bubbles = new BubbleSets(allSets, points, w, h, resolution, [10, 30]);
 		
+
 		// compute bubbles for set 0
 		var bubbleSet0 = bubbles.getSet(0);
-		var vEdges = bubbles.computeBubbleSet( bubbleSet0 );
-
-		// draw the energy field
-		var eMinMax = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
-		console.log("energy min/max: " + eMinMax[0] + " ... " + eMinMax[1]);
-		console.log("virtual edges: " + vEdges.length + ", MST: " + bubbleSet0.mst.length)
-
-		// draw extra stuff
+		
+		// draw stuff
+		bubbles.computeBubbleSet(bubbleSet0);
 		drawExtra(bubbleSet0);
+		var processTime = "" + (((new Date()).getTime() - startTime.getTime()) / 1000).toFixed(2);
+		console.log("Bubble set took: " + processTime + " seconds.");
+		bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+
+		// set callback on keyboard
+		/*
+		d3.select("body").on("keydown", function() {
+			if (d3.event.keyCode == 32) {
+				step();
+			}
+		});
+		*/
+
+
+		var endStep = false;
+		var lastStep = 0;
+		function step()
+		{
+			if (endStep) {
+				console.log("--- no more --- ");
+				return;
+			}
+			var ret = bubbles.findConnectivityStep(bubbleSet0, lastStep);
+			if (ret)
+			{
+				lastStep = ret.lastStep;
+				if (ret.obstacle) {
+					console.log("Obstacle: " + ret.obstacle.m);
+					d3.select("#obstacle_" + ret.obstacle.m).style("fill", "red").attr("r", "10");
+					//d3.select("#obstacle_" + ret.obstacle.m).transition().duration(3000).style("fill", "").attr("r", "");
+				}
+			}
+			console.log("lastStep: " + lastStep + ", MST has: " + bubbleSet0.mst.length + " edges");
+			drawExtra(bubbleSet0, true);
+
+			if (!ret) {
+				bubbles.computeBubbleSet(bubbleSet0);
+				bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+				endStep = true;
+			}
+		}
+
+		
+
+		function drawExtra(bubbleSet, _drawMST)
+		{
+			// draw bounding box for set 0
+			/*
+			var bb = bubbleSet.boundingBox;
+			svg.append("rect")
+				.attr("x", bb.left).attr("y", bb.top)
+				.attr("width", bb.right-bb.left)
+				.attr("height", bb.bottom-bb.top)
+				.style("stroke", "red").style("stroke-width", "1.5px")
+				.style("fill", "none");
+			*/
+
+			(function(g, vertices, obstacles, edges, drawMST) 
+			{
+				
+				var updateSelection = null;
+				
+				if (drawMST) {
+					updateSelection = g.selectAll("line.edge").data(edges, function(d) { return d.u + "_" + d.v; })
+					updateSelection.enter().append("line")
+						.attr("class", "edge")
+						.attr("id", function(d) { return "edge_" + vertices[d.u].m + "_" + vertices[d.v].m })
+						.attr("x1", function(d) { return vertices[d.u].x; })
+						.attr("y1", function(d) { return vertices[d.u].y; })
+						.attr("x2", function(d) { return vertices[d.v].x; })
+						.attr("y2", function(d) { return vertices[d.v].y; });
+
+					updateSelection
+						.attr("x1", function(d) { return vertices[d.u].x; })
+						.attr("y1", function(d) { return vertices[d.u].y; })
+						.attr("x2", function(d) { return vertices[d.v].x; })
+						.attr("y2", function(d) { return vertices[d.v].y; });
+
+					updateSelection.exit().transition().duration(3000)
+						.style("stroke", "red").remove();
+				}
+				else
+				{
+
+					updateSelection = g.selectAll("line.edge").data(edges, function(d) { return d.u.m + "_" + d.v.m; })
+					updateSelection.enter().append("line")
+						.attr("class", "edge")
+						.attr("id", function(d) { return "edge_" + d.u.m + "_" + d.v.m })
+						.attr("x1", function(d) { return d.u.x; })
+						.attr("y1", function(d) { return d.u.y; })
+						.attr("x2", function(d) { return d.v.x; })
+						.attr("y2", function(d) { return d.v.y; });
+
+					updateSelection
+						.attr("x1", function(d) { return d.u.x; })
+						.attr("y1", function(d) { return d.u.y; })
+						.attr("x2", function(d) { return d.v.x; })
+						.attr("y2", function(d) { return d.v.y; });
+
+				}
+
+				var verticesUpdate = svg.selectAll("circle.member").data(vertices);
+				verticesUpdate.enter().append("circle")
+					.attr("class", "member")
+					.attr("r", 0)
+					.attr("fill", function(d) { return d.joint ? "green" : "blue"; })
+					.attr("stroke", "black")
+					.attr("cx", function(d) { return d.x; })
+					.attr("cy", function(d) { return d.y; });
+				verticesUpdate.transition().duration(1000)
+					.attr("r", 7);
+
+
+				var obstaclesUpdate = svg.selectAll("circle.point").data(obstacles)
+				obstaclesUpdate.enter().append("circle")
+					.attr("id", function(d) { return "obstacle_" + d.m; })
+					.attr("class", "point")
+					.attr("cx", function(d) { return d.x; })
+					.attr("cy", function(d) { return d.y; });
+
+			})(edgeGroup, bubbleSet.members, bubbleSet.obstacles, _drawMST ? bubbleSet.mst : bubbleSet.vEdges , _drawMST);
+		}
 
 		function testEdgeIntersect(p)
 		{
@@ -141,6 +273,7 @@
 					minD = collision.distanceToLine;
 					minEdge = edge;
 				}
+
 			}
 
 			if (minEdge) 
@@ -169,29 +302,6 @@
 			}
 		}
 
-		function drawExtra(bubbleSet)
-		{
-			// draw bounding box for set 0
-			var bb = bubbleSet.boundingBox;
-			svg.append("rect")
-				.attr("x", bb.left).attr("y", bb.top)
-				.attr("width", bb.right-bb.left)
-				.attr("height", bb.bottom-bb.top)
-				.style("stroke", "red").style("stroke-width", "1.5px")
-				.style("fill", "none");
-
-			(function(g, vertices, edges) 
-			{
-				g.selectAll("line.edge").data(vEdges).enter().append("line")
-					.attr("class", "edge")
-					.attr("id", function(d) { return "edge_" + d.u.m + "_" + d.v.m })
-					.attr("x1", function(d) { return d.u.x; })
-					.attr("y1", function(d) { return d.u.y; })
-					.attr("x2", function(d) { return d.v.x; })
-					.attr("y2", function(d) { return d.v.y; });
-
-			})(edgeGroup, bubbleSet.members, bubbleSet.mst);
-		}
 
 	</script>
 </body>

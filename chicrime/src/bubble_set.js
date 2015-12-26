@@ -1,12 +1,14 @@
 /* ===================================
  * Bubble Sets
- * A crude & fast implementation
+ * A crude implementation
  * ===================================
  */
 
 
 var R0 = 10;
 var R1 = 25;
+var MAX_REROUTE_ITERATIONS = 15;
+var MAX_REROUTES = 100;
 
 function BubbleSets(sets, positions, w, h, r, R)
 {
@@ -25,6 +27,12 @@ function BubbleSets(sets, positions, w, h, r, R)
 	for (var i=0, N=sets.length; i<N; i++) 
 	{
 		var members = sets[i].members;
+		if (members.length == 0) {
+			// ignore empty sets
+			console.log("Ignored set with empty members");
+			continue;
+		}
+
 		var bubbleSet = {
 			members: [],
 			vertices: [],
@@ -36,8 +44,8 @@ function BubbleSets(sets, positions, w, h, r, R)
 			var m = members[j];
 			var p = positions[m];
 			bubbleSet.members.push({
-				x: p[0],
-				y: p[1],
+				x: p[0] || p.x,
+				y: p[1] || p.y,
 				m: m
 			});
 			bubbleSet.vertices.push(m);
@@ -52,13 +60,22 @@ function BubbleSets(sets, positions, w, h, r, R)
 	this.energy = new Int16Array(this.energyBuffer);
 
 	// mark obstacles
-	this.markActiveAreaAndObstacles();
+	this.calcBoundingBox();
+	this.addObstacles();
 }
 
 BubbleSets.prototype.computeBubbleSet = function(set)
 {
+	// connect sets
 	var vEdges = this.findConnectivity( set );
+
+	// recalculate bounding box; 
+	// it might have changed if new joint nodes were added
+	this.calcBoundingBox( set );
+
+	// calculate energy
 	this.calcEnergy( set, vEdges );
+
 	return vEdges;
 }
 
@@ -75,14 +92,14 @@ BubbleSets.prototype.getSet = function(index)
 	return this.sets[index];
 }
 
-BubbleSets.prototype.markActiveAreaAndObstacles = function()
+BubbleSets.prototype.calcBoundingBox = function(oneSet)
 {
 	var R1 = this.R1;
-	var R1Sq = this.R1Sq;
-
-	for (var i=0, N=this.sets.length; i<N; i++) 
+	var sets = oneSet ? [oneSet] : this.sets;
+	
+	for (var i=0, N=sets.length; i<N; i++) 
 	{
-		var set = this.sets[i];
+		var set = sets[i];
 		var bb = {
 			x: [Number.MAX_VALUE, -Number.MAX_VALUE],
 			y: [Number.MAX_VALUE, -Number.MAX_VALUE]
@@ -116,6 +133,12 @@ BubbleSets.prototype.markActiveAreaAndObstacles = function()
 		bb.bottom 	= bb.y[1];
 		set.boundingBox = bb;
 	}
+}
+
+BubbleSets.prototype.addObstacles = function()
+{
+	var R1Sq = this.R1Sq;
+	var overlapThreshold = Math.pow(this.R0, 2);
 
 	// identify obstacles for each set
 	for (var i=0, N=this.sets.length; i < N; i++)
@@ -137,8 +160,29 @@ BubbleSets.prototype.markActiveAreaAndObstacles = function()
 						var circle = members[m];
 						if (BoxCircleIntersect(bb, circle, R1Sq)) 
 						{
-							// add this member to set's obstacles
-							set.obstacles.push(circle);
+							// make sure the proposed obstacle have no overlap with any
+							// of out members, otherwise there wouldn't be a solution
+							var myMembers = set.members;
+							var safe = true;
+							for (var k=0, K=myMembers.length; k<K; k++) 
+							{
+								var member = myMembers[k];
+								d = Math.pow(circle.x-member.x, 2) + Math.pow(circle.y-member.y, 2);
+								if (d < overlapThreshold) 
+								{
+									safe = false;
+									break;
+								}
+							}
+							// safe to add
+							set.obstacles.push({
+								x: circle.x,
+								y: circle.y,
+								m: circle.m,
+								overlapping: !safe	// mark obstacles overlapping with set members
+													// so that we can ignore them in edge intersection
+													// but still use them in energy field calculation
+							});
 						}
 					}
 				}
@@ -188,10 +232,87 @@ BubbleSets.prototype.visualizeEnergyField = function(canvas, scale)
 	return minmax;
 }
 
+BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
+{
+	// get list of members and obstacles
+	var R1 = this.R1;
+	var R0 = this.R0;
+	var members = set.members;
+	var obstacles = set.obstacles;
+
+	// make a list of vertices for MST calculation
+	var vertices = [];
+	for (var i=0, M=members.length; i<M; i++) {
+		vertices.push(i);
+	}
+
+	// calculate MST
+	if (!set.mst)
+	{
+		var mst = (function(v, theSet) {
+			return KruskalMST(v, function(a, b) 
+			{
+				var pA = theSet.members[a];
+				var pB = theSet.members[b];
+				return Math.pow(pA.x-pB.x, 2) + Math.pow(pA.y-pB.y, 2);
+			});
+		})(vertices, set);
+
+		// store minimum spanning tree
+		set.mst = mst;
+	} else {
+		mst = set.mst;
+	}
+
+	// build virtual edges from MST, re-routing them if necessary
+	var vEdges = [];
+	var reRouteCount = 0;
+	for (var i=lastStep || 0; i < mst.length; i++)
+	{
+		var edge = mst[i];
+		var u = members[edge.u];
+		var v = members[edge.v];
+		var collisions = false;
+
+		for (var j=0, O=obstacles.length; j<O; j++) 
+		{
+			var obstacle = obstacles[j];
+			var collision = circleLineSegmentIntersect(u, v, obstacle, R0);
+			if (collision.intersects == 2 && collision.points && collision.points.length == 2 && reRouteCount < MAX_REROUTES) 
+			{
+				var newEdges = this.reRoute(set, edge, obstacle, collision);
+				reRouteCount++;
+
+				// add the new edges to MST
+				if (newEdges) {
+					mst.extend(newEdges);
+				}
+				collisions = obstacle;
+			}
+			else if (reRouteCount >= MAX_REROUTES) 
+			{
+				console.log("* reached max rerouting counts: " + MAX_REROUTES);
+				return vEdges;
+			}
+		}
+		
+		if (collisions)
+		{
+			mst.splice(i, 1);
+		}
+		return {
+			lastStep: i+1,
+			obstacle: collisions
+		};
+	}
+}
+
+
 BubbleSets.prototype.findConnectivity = function(set)
 {
 	// get list of members and obstacles
 	var R1 = this.R1;
+	var R0 = this.R0;
 	var members = set.members;
 	var obstacles = set.obstacles;
 
@@ -215,38 +336,158 @@ BubbleSets.prototype.findConnectivity = function(set)
 	set.mst = mst;
 
 	// build virtual edges from MST, re-routing them if necessary
-	var vEdges = [];
-	for (var i=0, len=mst.length; i<len; i++)
+	set.vEdges = []
+	var vEdges = set.vEdges;
+	var reRouteCount = 0;
+	for (var i=0; i < mst.length; i++)
 	{
 		var edge = mst[i];
 		var u = members[edge.u];
 		var v = members[edge.v];
-		var collisions = [];
+		var hasCollision = false;
 
 		for (var j=0, O=obstacles.length; j<O; j++) 
 		{
 			var obstacle = obstacles[j];
-			var intersection = circleLineSegmentIntersect(u, v, obstacle, R1);
-			
-			if (intersection.intersects > 0) 
+			if (obstacle.overlapping) {
+				// ignore this obstacle
+				continue;
+			}
+
+			// test edge againt obstacle
+			var intersection = circleLineSegmentIntersect(u, v, obstacle, R0);
+			var collisionTest = 
+				intersection.intersects == 2 &&
+				intersection.points && 
+				(intersection.points.length == 2 || intersection.points.length == 0);
+
+			if (collisionTest) 
 			{
-				// reroute edge
-				collisions.push(obstacle);
+				// flag collision
+				hasCollision = true;
+
+				if (reRouteCount < MAX_REROUTES) 
+				{
+					var newEdges = this.reRoute(set, edge, obstacle, intersection);
+					reRouteCount++;
+
+					// add the new edges to MST
+					if (newEdges) {
+						mst.push(newEdges[0]);
+						mst.push(newEdges[1]);
+					}
+				}
+				else 
+				{
+					console.log("* Can not re-route edge: reached max limit of " + MAX_REROUTES);
+				}
+				break;
 			}
 		}
 		
-		if (collisions.length == 0) 
+		if (!hasCollision)
 		{
-			// this edge is OK
+			// no collisions; this edge is OK
 			vEdges.push({ u: u, v: v });
+		}
+	}
+	return vEdges;
+}
+
+var COS_THETA = Math.cos(45 * Math.PI / 180);
+var SIN_THETA = Math.sin(45 * Math.PI / 180);
+
+BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
+{
+	var PUSH_OUT_0 = this.R0 * 1.6;
+	var PUSH_OUT = PUSH_OUT_0;
+
+
+	// start with a vector going from the center
+	// of the obstacle to the point that's perpendicular to the edge
+	var v = { 
+		x: collision.pointOnLine.x - obstacle.x, 
+		y: collision.pointOnLine.y - obstacle.y 
+	};
+
+	// if zero-vector, randomize
+	if (v.x == 0 && v.y == 0) 
+	{
+		randomVector = true;
+		v = {x: Math.random(), y: Math.random()};
+	}
+	normalize2(v);
+
+	var iteration = 0;
+	while (iteration++ < MAX_REROUTE_ITERATIONS)
+	{
+		var joint = {
+			x: obstacle.x + PUSH_OUT * v.x,
+			y: obstacle.y + PUSH_OUT * v.y
+		};
+
+		// test joint against all other obstacles
+		var bad = false;
+		for (var i=0, O=set.obstacles.length; i<O; i++) {
+			if (pointInCircle(joint, set.obstacles[i], this.R0Sq)) 
+			{
+				bad = true;
+				break;
+			}
+		}
+
+		if (bad) 
+		{
+			if (iteration % 4 == 0) 
+			{
+				// flip vector and rotate by 30 degrres
+				v.x *= -1;
+				v.y *= -1;
+			}
+			else if (iteration % 4 == 1)
+			{
+				// increase pushout
+				PUSH_OUT *= 1.4;
+			}
+			else if (iteration % 4 == 2)
+			{
+				// increase pushout
+				v.x *= -1;
+				v.y *= -1;
+			}
+			else if (iteration % 4 == 3)
+			{
+				var vRotated = {
+					x: v.x * COS_THETA - v.y * SIN_THETA,
+					y: v.x * SIN_THETA + v.y * COS_THETA
+				};
+				v = vRotated;
+			}
+		
 		}
 		else
 		{
-			// re-route edge
+			// add two new edges
+			joint.m = set.members.length;
+			joint.joint = true;
+			set.members.push(joint);
+
+			// add two new edges
+			return [
+				{
+					u: edge.u,
+					v: joint.m
+				},
+				{
+					u: joint.m,
+					v: edge.v
+				}
+			];
 		}
 	}
 
-	return vEdges;
+	// faiure to re-route
+	return null;
 }
 
 BubbleSets.prototype.calcEnergy = function(set, vEdges)
@@ -281,19 +522,30 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 	{
 		var pY = row * iR;
 		var rowOffset = row * w;
+		var hitMap = {};
+
 		for (var col=pBB.left; col <= pBB.right; col++)
 		{
 			var pX = col * iR;
 			var E = 0;
 
 			// accumilate contribution from set members
-			for (var i=0; i<M; i++) {
+			for (var i=0; i<M; i++) 
+			{
 				var member = setMembers[i];
+				if (member.joint)
+				{
+					// this is just a joint, skip
+					continue;
+				}
+
 				var d = Math.pow(pX-member.x, 2) + Math.pow(pY-member.y, 2);
 				if (d < R1Sq) {
 
 					// evaluate energy field
-					E += Math.pow(R1-Math.sqrt(d), 2) / R1R0Sq;
+					d = Math.sqrt(d);
+					E += Math.pow(R1-d, 2) / R1R0Sq;
+					hitMap[ member ] = d;
 				}
 			}
 
@@ -304,19 +556,30 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 				var edge = vEdges[i];
 
 				// see how far this edge is from the pixel
-				var collision = circleLineSegmentIntersect(edge.u, edge.v, {x: pX, y: pY, r: R1});
+				var collision = circleLineSegmentIntersect(edge.u, edge.v, {x: pX, y: pY}, R1);
 				if (collision.intersects > 0 && (minD === null || (minD > collision.distanceToLine))) 
 				{
 					minD = collision.distanceToLine;
 					minEdge = edge;
 				}
-			}
-			if (minEdge) {
-				var eContrib = Math.pow(R1 - minD, 2) / R1R0Sq;
-				E += eContrib;
-				if (eContrib < 0) {
-					console.log("edge energy contribution: " + eContrib)
+				else if (collision.intersects == 0) {
+					// test the nodes themselves as hiy for edges
+					var uHit = hitMap[edge.u];
+					var vHit = hitMap[edge.u];
+					if (uHit && uHit < minD) {
+						minD = uHit;
+						minEdge = edge;
+					}
+					if (vHit && vHit < minD) {
+						minD = vHit;
+						minEdge = edge;
+					}
 				}
+
+			}
+			if (minEdge) 
+			{
+				E += Math.pow(R1 - minD, 2) / R1R0Sq;
 			}
 
 			if (E > 0) 
@@ -349,18 +612,31 @@ BubbleSets.prototype.clearEnergyBuffer = function()
 
 // Helper geometric functions
 // ---------------------------
+function pointInCircle(point, circle, radiusSq)
+{
+	var d = Math.pow(point.x-circle.x, 2) + Math.pow(point.y-circle.y, 2);
+	return radiusSq !== undefined ? d < radiusSq : Math.sqrt(d) < circle.r;
+}
 
 function BoxBoxIntersect(box1, box2)
 {
+	/*
 	var xIntersect = 
-		(box1.left >= box2.left && box1.left < box2.right) ||
-		(box1.right >= box2.left && box1.right < box2.right);
+		(box1.left >= box2.left && box1.left <= box2.right) ||
+		(box1.right >= box2.left && box1.right <= box2.right);
 	
 	var yIntersect = 
-		(box1.top >= box2.top && box1.top < box2.bottom) ||
-		(box1.bottom >= box2.top && box1.bottom < box2.bottom);
+		(box1.top >= box2.top && box1.top <= box2.bottom) ||
+		(box1.bottom >= box2.top && box1.bottom <= box2.bottom);
 
 	return xIntersect && yIntersect;
+	*/
+	return !(
+		box1.left > box2.right ||
+		box2.left > box1.right ||
+		box1.top  > box2.bottom ||
+		box2.top  > box1.bottom
+	);
 }
 
 function BoxCircleIntersect(box, circle, radiusSq)
@@ -688,10 +964,6 @@ function KruskalMST(vertices, getWeight)
 		var sU = sets.lookup(edge.u);
 		var sV = sets.lookup(edge.v);
 
-		if (sU === undefined || sV === undefined) {
-			console.error("Undefined sU/sV in KruskalMST");
-		}
-
 		if (sets.FindOptimized(sU) != sets.FindOptimized(sV)) 
 		{
 			sets.UnionOptimized(sU, sV)
@@ -701,6 +973,17 @@ function KruskalMST(vertices, getWeight)
 	return MST;
 }
 
+function normalize2(v)
+{
+	var l = Math.pow(v.x, 2) + Math.pow(v.y, 2);
+	if (l > 0) 
+	{
+		l = 1 / Math.sqrt(l);
+		v.x *= l;
+		v.y *= l;
+	}
+	return v;
+}
 
 // extend Array with an extent() function; essentially an in-place concat()
 Array.prototype.extend = function(other_array) {
