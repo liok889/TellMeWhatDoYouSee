@@ -1,0 +1,198 @@
+<!DOCTYPE html>
+<html>
+<head>
+	<title>Bubble Sets Test</title>
+
+	<!-- code delivery network -->
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/d3/3.5.6/d3.min.js" charset="utf-8"></script>
+	<script src="https://cdnjs.cloudflare.com/ajax/libs/queue-async/1.0.7/queue.min.js"></script>
+
+	<!-- local scripts -->
+	<script src='lib/jquery.js' type='text/javascript'></script>
+	<script src='lib/jquery-ui.js' type='text/javascript'></script>
+	<script src='src/bubble_set.js' type='text/javascript'></script>
+	
+	<!-- local stylesheets -->
+	<link href='lib/jquery-ui.css' rel='stylesheet' />
+	<link href='src/infloader.css' rel='stylesheet' />
+	
+	<style>
+		body {
+			font-family: helvetica;
+			font-size: 10pt;
+		}
+
+		.point {
+			fill: #cccccc;
+			stroke: black;
+			stroke-width: 1px;
+			r: 4px;
+		}
+
+		#bubbleSVG {
+			border: solid 1px black;
+		}
+
+		.edge {
+			stroke: #222222;
+			stroke-width: 1px;
+		}
+
+		.edgeBrush {
+			r: 5px;
+			fill: red;
+			stroke: black;
+			stroke-width: 1px;
+		}
+	</style>
+</head>
+
+<body>
+	<canvas id="bubbleCanvas" width="800" height="600" style="position: absolute; left: 100px; top: 100px; z-index: 1"></canvas>
+	<svg id="bubbleSVG" width="800" height="600" style="position: absolute; left: 100px; top: 100px; z-index: 100"></svg>
+
+	<script type="text/javascript">
+
+		var padding = 80;		// 30 pixels of padding for points
+		var N = 40;				// number of points to generate
+		var setSize = [7, 10];	// min/max size of set
+		var resolution = .25;	// resolution of bubble set's energy field (relative to size of canvas)
+
+		var svg = d3.select("#bubbleSVG");
+		var canvas = d3.select("#bubbleCanvas");
+		var w = +svg.attr("width"), h = +svg.attr("height");
+
+		// make a group to hold the edges
+		var edgeGroup = svg.append("g");
+
+		// generate random points
+		var points = [];
+		for (var i=0; i<N; i++) {
+			var x = Math.random() * (w-2*padding) + padding;
+			var y = Math.random() * (h-2*padding) + padding;
+			points.push({
+				0: x, 1: y,
+				x: x, y: y
+			});
+		}
+
+		var setN = Math.floor(Math.random() * (setSize[1]-setSize[0])) + setSize[0];
+		setN = Math.max(setN, setSize[1]);
+		console.log("\tSet size: " + setN);
+		var set = [];
+		for (var i=0; i < setN; i++) {
+			set.push(i);
+		}
+
+		svg.selectAll("circle").data(points).enter().append("circle")
+			.attr("class", "point")
+			.attr("cx", function(d) { return d.x; })
+			.attr("cy", function(d) { return d.y; });
+		
+		svg.on("mousemove", function() {
+			var mouse = d3.mouse(this);
+			testEdgeIntersect({x: mouse[0], y: mouse[1]});
+		}).on("mouseout", function() {
+			svg.select("#mouseCircle").remove();
+		});
+
+		// bubble set calculation
+		var allSets = [{ members: set }];
+		var bubbles = new BubbleSets(allSets, points, w, h, resolution, [10, 40]);
+		
+		// compute bubbles for set 0
+		var bubbleSet0 = bubbles.getSet(0);
+		var vEdges = bubbles.computeBubbleSet( bubbleSet0 );
+
+		// draw the energy field
+		var eMinMax = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+		console.log("energy min/max: " + eMinMax[0] + " ... " + eMinMax[1]);
+		console.log("virtual edges: " + vEdges.length + ", MST: " + bubbleSet0.mst.length)
+
+		// draw extra stuff
+		drawExtra(bubbleSet0);
+
+		function testEdgeIntersect(p)
+		{
+			edgeGroup.selectAll("line.edge").style("stroke-width", "");
+			var mouseCircle = svg.select("#mouseCircle");
+			if (mouseCircle.size() == 0) {
+				mouseCircle = svg.append("circle")
+					.attr("id", "mouseCircle")
+					.attr("r", bubbles.R1)
+					.style("stroke", "blue")
+					.style("stroke-width", "1px")
+					.style("fill", "none");
+
+			}
+			mouseCircle.attr("cx", p.x)
+				.attr("cy", p.y);
+
+			var minEdge = null;
+			var minD = null;
+			for (var i=0, N=vEdges.length; i<N; i++) 
+			{
+				var edge = vEdges[i];
+
+				// see how far this edge is from the pixel
+				var collision = circleLineSegmentIntersect(edge.u, edge.v, {x: p.x, y: p.y, r: bubbles.R1});
+				if (collision.intersects > 0 && (minD == null || (minD > collision.distanceToLine))) 
+				{
+					minD = collision.distanceToLine;
+					minEdge = edge;
+				}
+			}
+
+			if (minEdge) 
+			{
+				console.log("* Edge distance: " + minD);
+
+				var update = svg.selectAll("circle.edgeBrush").data([minEdge.u, minEdge.v]);
+				update.enter().
+					append("circle").attr("class", "edgeBrush");
+
+				update.attr("cx", function(d) { return d.x}).attr("cy", function(d) { return d.y; });
+
+				/*
+				var eContrib = Math.pow(R1 - minD, 2) / R1R0Sq;
+				E += eContrib;
+				if (eContrib < 0) {
+					console.log("edge energy contribution: " + eContrib)
+				}
+				*/
+				d3.select("#edge_" + minEdge.u.m + "_" + minEdge.v.m).style("stroke-width", "4px")
+			}
+			else
+			{
+				console.log("---")
+				svg.selectAll("circle.edgeBrush").remove();
+			}
+		}
+
+		function drawExtra(bubbleSet)
+		{
+			// draw bounding box for set 0
+			var bb = bubbleSet.boundingBox;
+			svg.append("rect")
+				.attr("x", bb.left).attr("y", bb.top)
+				.attr("width", bb.right-bb.left)
+				.attr("height", bb.bottom-bb.top)
+				.style("stroke", "red").style("stroke-width", "1.5px")
+				.style("fill", "none");
+
+			(function(g, vertices, edges) 
+			{
+				g.selectAll("line.edge").data(vEdges).enter().append("line")
+					.attr("class", "edge")
+					.attr("id", function(d) { return "edge_" + d.u.m + "_" + d.v.m })
+					.attr("x1", function(d) { return d.u.x; })
+					.attr("y1", function(d) { return d.u.y; })
+					.attr("x2", function(d) { return d.v.x; })
+					.attr("y2", function(d) { return d.v.y; });
+
+			})(edgeGroup, bubbleSet.members, bubbleSet.mst);
+		}
+
+	</script>
+</body>
+</html>
