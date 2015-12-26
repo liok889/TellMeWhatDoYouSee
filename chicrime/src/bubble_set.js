@@ -70,11 +70,11 @@ BubbleSets.prototype.computeBubbleSet = function(set)
 	var vEdges = this.findConnectivity( set );
 
 	// recalculate bounding box; 
-	// it might have changed if new joint nodes were added
+	// it might have expanded if new joint nodes were added
 	this.calcBoundingBox( set );
 
 	// calculate energy
-	this.calcEnergy( set, vEdges );
+	this.calcEnergy( set );
 
 	return vEdges;
 }
@@ -161,7 +161,7 @@ BubbleSets.prototype.addObstacles = function()
 						if (BoxCircleIntersect(bb, circle, R1Sq)) 
 						{
 							// make sure the proposed obstacle have no overlap with any
-							// of out members, otherwise there wouldn't be a solution
+							// of our members, otherwise there wouldn't be a solution
 							var myMembers = set.members;
 							var safe = true;
 							for (var k=0, K=myMembers.length; k<K; k++) 
@@ -174,7 +174,8 @@ BubbleSets.prototype.addObstacles = function()
 									break;
 								}
 							}
-							// safe to add
+
+							// add obstacle
 							set.obstacles.push({
 								x: circle.x,
 								y: circle.y,
@@ -191,9 +192,9 @@ BubbleSets.prototype.addObstacles = function()
 	}
 }
 
-BubbleSets.prototype.visualizeEnergyField = function(canvas, scale)
+BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
 {
-	var ENERGY_COLOR_SCALE = ['#fef0d9','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#990000'];
+	var ENERGY_COLOR_SCALE = _colorScale || ['#fef0d9','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#990000'];
 
 	// determine min/max (only consider positive numbers)
 	var w = this.w;
@@ -201,7 +202,7 @@ BubbleSets.prototype.visualizeEnergyField = function(canvas, scale)
 	var minmax = [Number.MAX_VALUE, -Number.MAX_VALUE];
 	var energy = this.energy;
 	if (!scale) {
-		scale = 1;
+		scale = 1 / this.resolution;
 	}
 
 	for (var i=0, index=0; i < h; i++) {
@@ -234,9 +235,12 @@ BubbleSets.prototype.visualizeEnergyField = function(canvas, scale)
 
 BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 {
-	// get list of members and obstacles
+	// intersection paramteres
 	var R1 = this.R1;
 	var R0 = this.R0;
+	var R0Sq = this.R0Sq;
+
+	// get list of members and obstacles
 	var members = set.members;
 	var obstacles = set.obstacles;
 
@@ -277,7 +281,7 @@ BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 		for (var j=0, O=obstacles.length; j<O; j++) 
 		{
 			var obstacle = obstacles[j];
-			var collision = circleLineSegmentIntersect(u, v, obstacle, R0);
+			var collision = circleLineSegmentIntersect(u, v, obstacle, R0, R0Sq);
 			if (collision.intersects == 2 && collision.points && collision.points.length == 2 && reRouteCount < MAX_REROUTES) 
 			{
 				var newEdges = this.reRoute(set, edge, obstacle, collision);
@@ -310,9 +314,12 @@ BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 
 BubbleSets.prototype.findConnectivity = function(set)
 {
-	// get list of members and obstacles
+	// intersection parameteres
 	var R1 = this.R1;
 	var R0 = this.R0;
+	var R0Sq = this.R0Sq;
+
+	// get list of members and obstacles
 	var members = set.members;
 	var obstacles = set.obstacles;
 
@@ -355,7 +362,7 @@ BubbleSets.prototype.findConnectivity = function(set)
 			}
 
 			// test edge againt obstacle
-			var intersection = circleLineSegmentIntersect(u, v, obstacle, R0);
+			var intersection = circleLineSegmentIntersect(u, v, obstacle, R0, R0Sq);
 			var collisionTest = 
 				intersection.intersects == 2 &&
 				intersection.points && 
@@ -399,7 +406,7 @@ var SIN_THETA = Math.sin(45 * Math.PI / 180);
 
 BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 {
-	var PUSH_OUT_0 = this.R0 * 1.6;
+	var PUSH_OUT_0 = this.R1 * 0.9;
 	var PUSH_OUT = PUSH_OUT_0;
 
 
@@ -490,15 +497,13 @@ BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 	return null;
 }
 
-BubbleSets.prototype.calcEnergy = function(set, vEdges)
+BubbleSets.prototype.calcEnergy = function(set)
 {
-	// clear energy buffer
-	this.clearEnergyBuffer();
-
 	// calculate pixel-based active area
 	var R1 = this.R1;
 	var R1Sq = this.R1Sq;
 	var R1R0Sq = this.R1R0Sq;
+	var vEdges = set.vEdges;
 
 	var r = this.resolution;
 	var iR = 1/r;
@@ -506,25 +511,33 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 	var w = this.w;
 	var h = this.h;
 	var bb = set.boundingBox;
-	var pBB = {
-		left: Math.max(0, Math.floor(bb.left*r)),
-		right: Math.min(w-1, Math.ceil(bb.right*r)),
-		top: Math.max(0, Math.floor(bb.top*r)),
-		bottom: Math.min(h-1, Math.floor(bb.bottom*r))
+	
+	// pixel-based bounding box
+	var pBB = 
+	{
+		left: 		Math.max(0,  	Math.floor(	bb.left*r)),
+		right: 		Math.min(w-1,	Math.ceil(	bb.right*r)),
+		top: 		Math.max(0,		Math.floor(	bb.top*r)),
+		bottom: 	Math.min(h-1,	Math.floor(	bb.bottom*r))
 	};
+	set.pBB = pBB;
 
+	var energyField = this.energy;
 	var setMembers = set.members;
 	var setObstacles = set.obstacles;
 	var M = setMembers.length;
 
+	// clear energy buffer
+	this.clearEnergyBuffer(pBB);
+
 	// loop through all pixels
-	for (var row=pBB.top; row <= pBB.bottom; row++)
+	for (var row=pBB.top, bottom = pBB.bottom; row <= bottom; row++)
 	{
 		var pY = row * iR;
 		var rowOffset = row * w;
-		var hitMap = {};
+		var hitMap = {};			// map of nodes we hit
 
-		for (var col=pBB.left; col <= pBB.right; col++)
+		for (var col=pBB.left, right=pBB.right; col <= right; col++)
 		{
 			var pX = col * iR;
 			var E = 0;
@@ -533,14 +546,17 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 			for (var i=0; i<M; i++) 
 			{
 				var member = setMembers[i];
+				/*
 				if (member.joint)
 				{
 					// this is just a joint, skip
 					continue;
 				}
+				*/
 
 				var d = Math.pow(pX-member.x, 2) + Math.pow(pY-member.y, 2);
-				if (d < R1Sq) {
+				if (d < R1Sq) 
+				{
 
 					// evaluate energy field
 					d = Math.sqrt(d);
@@ -556,21 +572,22 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 				var edge = vEdges[i];
 
 				// see how far this edge is from the pixel
-				var collision = circleLineSegmentIntersect(edge.u, edge.v, {x: pX, y: pY}, R1);
+				var collision = circleLineSegmentIntersect(edge.u, edge.v, {x: pX, y: pY}, R1, R1Sq);
 				if (collision.intersects > 0 && (minD === null || (minD > collision.distanceToLine))) 
 				{
 					minD = collision.distanceToLine;
 					minEdge = edge;
 				}
-				else if (collision.intersects == 0) {
+				else if (collision.intersects == 0) 
+				{
 					// test the nodes themselves as hiy for edges
 					var uHit = hitMap[edge.u];
 					var vHit = hitMap[edge.u];
-					if (uHit && uHit < minD) {
+					if (uHit !== undefined && uHit < minD) {
 						minD = uHit;
 						minEdge = edge;
 					}
-					if (vHit && vHit < minD) {
+					if (vHit !== undefined && vHit < minD) {
 						minD = vHit;
 						minEdge = edge;
 					}
@@ -589,17 +606,18 @@ BubbleSets.prototype.calcEnergy = function(set, vEdges)
 					var obstacle = setObstacles[i];
 					var d = Math.pow(pX-obstacle.x, 2) + Math.pow(pY-obstacle.y, 2);
 					if (d < R1Sq) {
-						E += -0.8 * Math.pow(R1-Math.sqrt(d), 2) / R1R0Sq;
+						E += -0.9 * Math.pow(R1-Math.sqrt(d), 2) / R1R0Sq;
 					}
 				}
 			}
 
 			if (E > 0) 
 			{
-				this.energy[rowOffset + col] = Math.floor(100 * E + .5);
+				energyField[rowOffset + col] = Math.floor(100 * E + .5);
 			}
 		}
 	}
+	return pBB;
 }
 
 BubbleSets.prototype.clearEnergyBuffer = function()
@@ -607,6 +625,98 @@ BubbleSets.prototype.clearEnergyBuffer = function()
 	// clear the buffer
 	for (var i=0, N=this.w * this.h; i < N; i++) {
 		this.energy[i] = 0;
+	}	
+}
+
+BubbleSets.prototype.floodFill = function(set, eThreshold)
+{
+	var pBB = set.pBB;
+	var w = this.w;
+	var w_0 = pBB.left;
+	var h_0 = pBB.top;
+	var w_1 = pBB.right;
+	var h_1 = pBB.bottom;
+
+	// choose an arbitrary member of the set
+	var sX = Math.floor(set.members[0].x * this.resolution);
+	var sY = Math.floor(set.members[0].y * this.resolution);
+	var startP = {
+		x: sX,
+		y: sY,
+		I: sX + (sY << 16)
+	};
+
+	// energy field
+	var energy = this.energy;
+
+	// keep track of visited pixels
+	var visited = {};
+
+	// keep track of conrour edges
+	var contourEdge = [];
+
+	// flood q
+	var q = [];
+	q.push(startP);
+
+	var iterations = 0;
+	while (q.length > 0) 
+	{
+		iterations++;
+		var p = q.pop();
+
+		// make sure pixel has not been visited before
+		if (visited[p.I]) {
+			continue;
+		}
+		
+		// mark as visited
+		visited[p.I] = true;
+
+		var x = p.x, y = p.y;
+		var X = x, Y = y << 16;
+		
+		// evaluate
+		var E = energy[y * w + x];
+		if (E <= eThreshold) 
+		{
+			contourEdge.push({x: x, y: y});
+		}
+		else
+		{
+			// calculate indices and add 8 neighboring cells, if within bounds
+			var xMinus = x > w_0	?  X-1 : null;
+			var xPlus  = x < w_1	?  X+1 : null;
+			var yMinus = y > h_0	? (y-1) << 16 : null;
+			var yPlus  = y < h_1  	? (y+1) << 16 : null;
+
+			var I;
+			I = Y+xMinus;		if (xMinus !== null && !visited[I]) 						q.push({ x: x-1, y: y,   I: I });
+			I = yMinus+xMinus;	if (xMinus !== null && yMinus !== null && !visited[I]) 		q.push({ x: x-1, y: y-1, I: I });
+			I = yPlus +xMinus;	if (xMinus !== null && yPlus  !== null && !visited[I]) 		q.push({ x: x-1, y: y+1, I: I });
+			
+			I = yMinus+X;		if (yMinus !== null && !visited[I]) 						q.push({ x: x, y: y-1, I: I });
+			I = yPlus +X;		if (yPlus  !== null && !visited[I]) 						q.push({ x: x, y: y+1, I: I });
+			
+			I = Y+xPlus;		if (xPlus  !== null && !visited[I]) 						q.push({ x: x+1, y: y, I: I});
+			I = yPlus+xPlus;	if (xPlus  !== null && yPlus !== null  && !visited[I]) 		q.push({ x: x+1, y: y+1, I: I});
+			I = yMinus+xPlus;	if (xPlus  !== null && yMinus !== null && !visited[I]) 		q.push({ x: x+1, y: y-1, I: I});
+		}
+	}
+	console.log("Flood fill iterations: " + iterations);
+	return contourEdge;
+}
+
+BubbleSets.prototype.visualizeContourEdge = function(canvas, contour, _scale)
+{
+	var scale = _scale || 1.0 / this.resolution;
+	var ctx = canvas.getContext("2d");
+	ctx.fillStyle = "#000000";
+
+	for (var i=0, N=contour.length; i<N; i++) 
+	{
+		var p = contour[i];
+		ctx.fillRect(p.x*scale, p.y*scale, scale, scale);
 	}	
 }
 
@@ -620,17 +730,6 @@ function pointInCircle(point, circle, radiusSq)
 
 function BoxBoxIntersect(box1, box2)
 {
-	/*
-	var xIntersect = 
-		(box1.left >= box2.left && box1.left <= box2.right) ||
-		(box1.right >= box2.left && box1.right <= box2.right);
-	
-	var yIntersect = 
-		(box1.top >= box2.top && box1.top <= box2.bottom) ||
-		(box1.bottom >= box2.top && box1.bottom <= box2.bottom);
-
-	return xIntersect && yIntersect;
-	*/
 	return !(
 		box1.left > box2.right ||
 		box2.left > box1.right ||
@@ -667,9 +766,9 @@ function BoxCircleIntersect(box, circle, radiusSq)
 	return distanceSquared < (radiusSq || (circle.r * circle.r));	
 }
 
-function circleLineSegmentIntersect(a, b, circle, radius)
+function circleLineSegmentIntersect(a, b, circle, radius, radiusSq)
 {
-	var ret = findIntersections([a.x, a.y], [b.x, b.y], [circle.x, circle.y, radius || circle.r]);
+	var ret = findIntersections(a, b, circle, radius, radiusSq);
 
 	if (ret.intersects == 0)
 	{
@@ -766,51 +865,54 @@ function circleLineSegmentIntersect(a, b, circle, radius)
 	}
 
 	// circle-line segment intersection code from: http://bl.ocks.org/milkbread/11000965
-	function findIntersections(a, b, c) 
+	function findIntersections(a, b, c, _r, _rSq) 
 	{
+		// square of circle radius
+		var r = _r || c.r;
+		var rSq = _rSq || Math.pow(r, 2);
+
 		// Calculate the euclidean distance between a & b
-		eDistAtoB = Math.sqrt( Math.pow(b[0]-a[0], 2) + Math.pow(b[1]-a[1], 2) );
+		var eDistAtoB = Math.sqrt( Math.pow(b.x-a.x, 2) + Math.pow(b.y-a.y, 2) );
 
 		// compute the direction vector d from a to b
-		d = [ (b[0]-a[0])/eDistAtoB, (b[1]-a[1])/eDistAtoB ];
+		var d = {
+			x: (b.x-a.x) / eDistAtoB, 
+			y: (b.y-a.y) / eDistAtoB 
+		};
 
 		// Now the line equation is x = dx*t + ax, y = dy*t + ay with 0 <= t <= 1.
 
 		// compute the value t of the closest point to the circle center (cx, cy)
-		t = (d[0] * (c[0]-a[0])) + (d[1] * (c[1]-a[1]));
+		var t = (d.x * (c.x-a.x)) + (d.y * (c.y-a.y));
 
 		// compute the coordinates of the point e on line and closest to c
 	    var e = {
-			x: (t * d[0]) + a[0],
-			y: (t * d[1]) + a[1]
+			x: (t * d.x) + a.x,
+			y: (t * d.y) + a.y
 		};
 
 		// Calculate the euclidean distance between c & e
-		eDistCtoE = Math.sqrt( Math.pow(e.x-c[0], 2) + Math.pow(e.y-c[1], 2) );
+		var eDistCtoESq = Math.pow(e.x-c.x, 2) + Math.pow(e.y-c.y, 2);
+		var eDistCtoE = Math.sqrt( eDistCtoESq );
 
 		// test if the line intersects the circle
-		if( eDistCtoE < c[2] )
+		if( eDistCtoE < r )
 		{
 			// compute distance from t to circle intersection point
-			dt = Math.sqrt( Math.pow(c[2], 2) - Math.pow(eDistCtoE, 2));
+			var dt = Math.sqrt( rSq - eDistCtoESq );
+			
 			// compute first intersection point
 			var f = {
-				x: ((t-dt) * d[0]) + a[0],
-				y: ((t-dt) * d[1]) + a[1]
-			}
+				x: ((t-dt) * d.x) + a.x,
+				y: ((t-dt) * d.y) + a.y
+			};
 			
-			// check if f lies on the line
-			//f.onLine = is_on(a,b,f.coords);
-
 			// compute second intersection point
 			var g = {
-				x: ((t+dt) * d[0]) + a[0],
-				y: ((t+dt) * d[1]) + a[1]
-			}
+				x: ((t+dt) * d.x) + a.x,
+				y: ((t+dt) * d.y) + a.y
+			};
 			
-			// check if g lies on the line
-			//g.onLine = is_on(a,b,g.coords);
-
 			return {
 				intersects: 2, 
 				pointOnLine: e,
@@ -818,12 +920,14 @@ function circleLineSegmentIntersect(a, b, circle, radius)
 				points: [f, g]
 			};
 
-		} else if (parseInt(eDistCtoE) === parseInt(c[2])) {
+		} 
+		else if ( Math.floor(eDistCtoE) == Math.floor(r) ) 
+		{
 			// console.log("Only one intersection");
 			return {
-				intersects: 1, 
-				distanceToLine: eDistCtoE,
+				intersects: 1,
 				pointOnLine: e,
+				distanceToLine: eDistCtoE,
 				points: null
 			};
 		} else 
@@ -836,14 +940,6 @@ function circleLineSegmentIntersect(a, b, circle, radius)
 				points: null
 			};
 		}
-	}
-
-	// BASIC GEOMETRIC functions
-	function distance(a,b) {
-		return Math.sqrt( Math.pow(a[0]-b[0], 2) + Math.pow(a[1]-b[1], 2) )
-	}
-	function is_on(a, b, c) {
-		return distance(a,c) + distance(c,b) == distance(a,b);
 	}
 }
 
