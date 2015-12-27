@@ -7,7 +7,7 @@
 
 var R0 = 10;
 var R1 = 25;
-var MAX_REROUTE_ITERATIONS = 15;
+var MAX_REROUTE_ITERATIONS = 25;
 var MAX_REROUTES = 100;
 
 function BubbleSets(sets, positions, w, h, r, R)
@@ -138,7 +138,7 @@ BubbleSets.prototype.calcBoundingBox = function(oneSet)
 BubbleSets.prototype.addObstacles = function()
 {
 	var R1Sq = this.R1Sq;
-	var overlapThreshold = Math.pow(this.R0, 2);
+	var overlapThreshold = Math.pow(this.R0 * .75, 2);
 
 	// identify obstacles for each set
 	for (var i=0, N=this.sets.length; i < N; i++)
@@ -281,10 +281,10 @@ BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 		for (var j=0, O=obstacles.length; j<O; j++) 
 		{
 			var obstacle = obstacles[j];
-			var collision = circleLineSegmentIntersect(u, v, obstacle, R0, R0Sq);
-			if (collision.intersects == 2 && collision.points && collision.points.length == 2 && reRouteCount < MAX_REROUTES) 
+			var intersection = this.edgeCollisionTest(u, v, obstacle);
+			if (intersection && reRouteCount < MAX_REROUTES) 
 			{
-				var newEdges = this.reRoute(set, edge, obstacle, collision);
+				var newEdges = this.reRoute(set, edge, obstacle, intersection);
 				reRouteCount++;
 
 				// add the new edges to MST
@@ -308,6 +308,24 @@ BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 			lastStep: i+1,
 			obstacle: collisions
 		};
+	}
+}
+
+BubbleSets.prototype.edgeCollisionTest = function(u, v, obstacle)
+{	
+	var intersection = circleLineSegmentIntersect(u, v, obstacle, this.R0, this.R0Sq);
+	var collisionTest =
+		intersection.intersects == 2 &&
+		intersection.points && 
+		(intersection.points.length == 2 || intersection.points.length == 0);
+	
+	if (collisionTest) 
+	{
+		return intersection;
+	}
+	else
+	{
+		return null;
 	}
 }
 
@@ -356,19 +374,16 @@ BubbleSets.prototype.findConnectivity = function(set)
 		for (var j=0, O=obstacles.length; j<O; j++) 
 		{
 			var obstacle = obstacles[j];
-			if (obstacle.overlapping) {
-				// ignore this obstacle
+			if (obstacle.overlapping) 
+			{
+				// ignore this obstacle; it overlaps with the node
+				// and it would be very difficult to reroute the edge around it
 				continue;
 			}
 
 			// test edge againt obstacle
-			var intersection = circleLineSegmentIntersect(u, v, obstacle, R0, R0Sq);
-			var collisionTest = 
-				intersection.intersects == 2 &&
-				intersection.points && 
-				(intersection.points.length == 2 || intersection.points.length == 0);
-
-			if (collisionTest) 
+			var intersection = this.edgeCollisionTest(u, v, obstacle);
+			if (intersection) 
 			{
 				// flag collision
 				hasCollision = true;
@@ -406,95 +421,152 @@ var SIN_THETA = Math.sin(45 * Math.PI / 180);
 
 BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 {
-	var PUSH_OUT_0 = this.R1 * 0.9;
-	var PUSH_OUT = PUSH_OUT_0;
+	var PUSH_OUT = this.R0 * 1.5;
 
 
 	// start with a vector going from the center
 	// of the obstacle to the point that's perpendicular to the edge
-	var v = { 
+	var V = { 
 		x: collision.pointOnLine.x - obstacle.x, 
 		y: collision.pointOnLine.y - obstacle.y 
 	};
 
 	// if zero-vector, randomize
-	if (v.x == 0 && v.y == 0) 
+	if (V.x == 0 && V.y == 0) 
 	{
 		randomVector = true;
-		v = {x: Math.random(), y: Math.random()};
+		V = {x: Math.random(), y: Math.random()};
 	}
-	normalize2(v);
+	normalize2(V);
 
 	var iteration = 0;
-	while (iteration++ < MAX_REROUTE_ITERATIONS)
+	var maxIterations = MAX_REROUTE_ITERATIONS;
+	var solution = null;
+
+	while (iteration < maxIterations)
 	{
 		var joint = {
-			x: obstacle.x + PUSH_OUT * v.x,
-			y: obstacle.y + PUSH_OUT * v.y
+			x: obstacle.x + PUSH_OUT * V.x,
+			y: obstacle.y + PUSH_OUT * V.y
 		};
 
 		// test joint against all other obstacles
-		var bad = false;
-		for (var i=0, O=set.obstacles.length; i<O; i++) {
-			if (pointInCircle(joint, set.obstacles[i], this.R0Sq)) 
+		var badJoint = false;
+		for (var i=0, O=set.obstacles.length; i<O; i++) 
+		{
+			var obstacle = set.obstacles[i];
+			if (!obstacle.overlapping && pointInCircle(joint, set.obstacles[i], this.R0Sq))
 			{
-				bad = true;
+				badJoint = true;
 				break;
 			}
 		}
+		if (!badJoint && solution == null) {
+			solution = {
+				x: joint.x, y: joint.y
+			};
+		}
 
-		if (bad) 
+		var badEdge = false;
+		if (!badJoint)
+		{
+			// test the new proposed edges against obstacles
+			
+			var u = set.members[edge.u];
+			var v = set.members[edge.v];
+
+			for (var i=0, O=set.obstacles.length; i<O; i++) 
+			{
+				var obstacle = set.obstacles[i];
+				if (obstacle.overlapping) {
+					continue;
+				}
+				if (
+					this.edgeCollisionTest(u, joint, obstacle) !== null ||
+					this.edgeCollisionTest(v, joint, obstacle) !== null
+				) 
+				{
+					badEdge = true;
+					break;
+				}
+			}
+		}
+
+		if (badEdge && solution && !solution.itrLimited) 
+		{
+			// try this only 8 times
+			maxIterations = iteration + 4*3;
+			solution.itrLimited = true;
+		}
+
+		if (!badJoint && !badEdge)
+		{
+			// we have a solution
+			solution = joint;
+			break;
+		}
+		else
 		{
 			if (iteration % 4 == 0) 
 			{
-				// flip vector and rotate by 30 degrres
-				v.x *= -1;
-				v.y *= -1;
+				// increase push out
+				PUSH_OUT *= 1.4;
+				//console.log("1) push out: " + PUSH_OUT + ", V: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
+
 			}
 			else if (iteration % 4 == 1)
 			{
 				// increase pushout
-				PUSH_OUT *= 1.4;
+				// flip
+				V.x *= -1;
+				V.y *= -1;
+				PUSH_OUT /= 1.4;
+				//console.log("2) push out: " + PUSH_OUT + ", v: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
+
 			}
 			else if (iteration % 4 == 2)
 			{
-				// increase pushout
-				v.x *= -1;
-				v.y *= -1;
+				PUSH_OUT *= 1.4;
+				//console.log("3) push out: " + PUSH_OUT + ", v: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
+
 			}
 			else if (iteration % 4 == 3)
 			{
+				PUSH_OUT /= 1.4;
 				var vRotated = {
-					x: v.x * COS_THETA - v.y * SIN_THETA,
-					y: v.x * SIN_THETA + v.y * COS_THETA
+					x: V.x * COS_THETA - V.y * SIN_THETA,
+					y: V.x * SIN_THETA + V.y * COS_THETA
 				};
-				v = vRotated;
-			}
-		
-		}
-		else
-		{
-			// add two new edges
-			joint.m = set.members.length;
-			joint.joint = true;
-			set.members.push(joint);
+				V = vRotated;
+				//console.log("4) rotated: " + vRotated.x.toFixed(2) + ", " + vRotated.y.toFixed(2));
 
-			// add two new edges
-			return [
-				{
-					u: edge.u,
-					v: joint.m
-				},
-				{
-					u: joint.m,
-					v: edge.v
-				}
-			];
+			}
 		}
+		iteration++;
 	}
 
-	// faiure to re-route
-	return null;
+	if (solution)
+	{
+		// add two new edges
+		solution.m = set.members.length;
+		solution.joint = true;
+		set.members.push(solution);
+
+		// add two new edges
+		return [{
+			u: edge.u,
+			v: solution.m
+		},
+		{
+			u: solution.m,
+			v: edge.v
+		}];
+	}
+	else
+	{
+		// faiure to re-route
+		return null;
+	}
 }
 
 BubbleSets.prototype.calcEnergy = function(set)
@@ -504,6 +576,11 @@ BubbleSets.prototype.calcEnergy = function(set)
 	var R1Sq = this.R1Sq;
 	var R1R0Sq = this.R1R0Sq;
 	var vEdges = set.vEdges;
+
+	var EDGE_W 		=  1.1;
+	var MEMBER_W 	=  1.0;
+	var JOINT_W 	=  0.5;
+	var OBSTACLE_W 	= -1.0; 
 
 	var r = this.resolution;
 	var iR = 1/r;
@@ -560,7 +637,7 @@ BubbleSets.prototype.calcEnergy = function(set)
 
 					// evaluate energy field
 					d = Math.sqrt(d);
-					E += Math.pow(R1-d, 2) / R1R0Sq;
+					E += (member.joint ? JOINT_W : MEMBER_W) * Math.pow(R1-d, 2) / R1R0Sq;
 					hitMap[ member ] = d;
 				}
 			}
@@ -596,7 +673,7 @@ BubbleSets.prototype.calcEnergy = function(set)
 			}
 			if (minEdge) 
 			{
-				E += Math.pow(R1 - minD, 2) / R1R0Sq;
+				E += EDGE_W * Math.pow(R1 - minD, 2) / R1R0Sq;
 			}
 
 			if (E > 0) 
@@ -606,7 +683,7 @@ BubbleSets.prototype.calcEnergy = function(set)
 					var obstacle = setObstacles[i];
 					var d = Math.pow(pX-obstacle.x, 2) + Math.pow(pY-obstacle.y, 2);
 					if (d < R1Sq) {
-						E += -0.9 * Math.pow(R1-Math.sqrt(d), 2) / R1R0Sq;
+						E += OBSTACLE_W * Math.pow(R1-Math.sqrt(d), 2) / R1R0Sq;
 					}
 				}
 			}

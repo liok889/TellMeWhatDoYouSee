@@ -56,7 +56,7 @@
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
 		var setSize = [20, 25];	// min/max size of set
-		var resolution = .25;	// resolution of bubble set's energy field (relative to size of canvas)
+		var resolution = .15;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
 		var canvas = d3.select("#bubbleCanvas");
@@ -112,7 +112,7 @@
 		var startTime = new Date();
 		// bubble set calculation
 		var allSets = [{ members: set }, {members: obstacles}];
-		var bubbles = new BubbleSets(allSets, points, w, h, resolution, [10, 37]);
+		var bubbles = new BubbleSets(allSets, points, w, h, resolution, [10, 30]);
 		
 
 		// compute bubbles for set 0
@@ -232,7 +232,7 @@
 					.attr("cx", function(d) { return d.x; })
 					.attr("cy", function(d) { return d.y; });
 				verticesUpdate.transition().duration(1000)
-					.attr("r", 7);
+					.attr("r", function(d) { return d.joint ? 3 : 6; });
 
 
 				var obstaclesUpdate = svg.selectAll("circle.point").data(obstacles)
