@@ -1025,8 +1025,6 @@ function circleLineSegmentIntersect(a, b, circle, radius, radiusSq)
 	}
 }
 
-
-
 // Union-Find data struct
 // Minimum spanning tree
 // -----------------------
@@ -1035,7 +1033,6 @@ function UnionFind()
 {
 	this.sets = {};
 }
-
 
 UnionFind.prototype.MakeSet = function(name)
 {
@@ -1056,34 +1053,16 @@ UnionFind.prototype.lookup = function(name) {
 
 UnionFind.prototype.Find = function(x)
 {
-	if (x.parent == x) {
-		return x;
+	if (x.parent != x) {
+		x.parent = this.Find(x.parent);
 	}
-	else {
-		return this.Find(x.parent);
-	}
+	return x.parent;
 }
 
 UnionFind.prototype.Union = function(x, y)
 {
 	var xRoot = this.Find(x);
 	var yRoot = this.Find(y);
-	xRoot.parent = yRoot;
-}
-
-/* optimized versions */
-UnionFind.prototype.FindOptimized = function(x)
-{
-	if (x.parent != x) {
-		x.parent = this.FindOptimized(x.parent);
-	}
-	return x.parent;
-}
-
-UnionFind.prototype.UnionOptimized = function(x, y)
-{
-	var xRoot = this.FindOptimized(x);
-	var yRoot = this.FindOptimized(y);
 	if (xRoot == yRoot) {
 		return;
 	}
@@ -1142,9 +1121,9 @@ function KruskalMST(vertices, getWeight)
 		var sU = sets.lookup(edge.u);
 		var sV = sets.lookup(edge.v);
 
-		if (sets.FindOptimized(sU) != sets.FindOptimized(sV)) 
+		if (sets.Find(sU) != sets.Find(sV)) 
 		{
-			sets.UnionOptimized(sU, sV)
+			sets.Union(sU, sV)
 			MST.push(edge)
 		}
 	}
