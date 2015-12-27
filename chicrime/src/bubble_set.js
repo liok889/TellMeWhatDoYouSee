@@ -1,14 +1,14 @@
 /* ===================================
  * Bubble Sets
- * A crude implementation
+ * A crude JavaScript implementation
  * ===================================
  */
 
 
 var R0 = 10;
 var R1 = 25;
-var MAX_REROUTE_ITERATIONS = 25;
-var MAX_REROUTES = 100;
+var MAX_REROUTE_ITERATIONS = 48;	// note: solution-space cycles after 48 iterations
+var MAX_REROUTES = 50;				// max attempts at re-routing an edge
 
 function BubbleSets(sets, positions, w, h, r, R)
 {
@@ -27,7 +27,8 @@ function BubbleSets(sets, positions, w, h, r, R)
 	for (var i=0, N=sets.length; i<N; i++) 
 	{
 		var members = sets[i].members;
-		if (members.length == 0) {
+		if (members.length == 0) 
+		{
 			// ignore empty sets
 			console.log("Ignored set with empty members");
 			continue;
@@ -138,7 +139,7 @@ BubbleSets.prototype.calcBoundingBox = function(oneSet)
 BubbleSets.prototype.addObstacles = function()
 {
 	var R1Sq = this.R1Sq;
-	var overlapThreshold = Math.pow(this.R0 * .75, 2);
+	var overlapThreshold = Math.pow(this.R0 * .25, 2);
 
 	// identify obstacles for each set
 	for (var i=0, N=this.sets.length; i < N; i++)
@@ -160,10 +161,14 @@ BubbleSets.prototype.addObstacles = function()
 						var circle = members[m];
 						if (BoxCircleIntersect(bb, circle, R1Sq)) 
 						{
+							/*
+							// The following test seems un-necessary
+							//
 							// make sure the proposed obstacle have no overlap with any
 							// of our members, otherwise there wouldn't be a solution
 							var myMembers = set.members;
 							var safe = true;
+																	
 							for (var k=0, K=myMembers.length; k<K; k++) 
 							{
 								var member = myMembers[k];
@@ -174,15 +179,18 @@ BubbleSets.prototype.addObstacles = function()
 									break;
 								}
 							}
+							*/
 
 							// add obstacle
 							set.obstacles.push({
 								x: circle.x,
 								y: circle.y,
 								m: circle.m,
+								/*
 								overlapping: !safe	// mark obstacles overlapping with set members
 													// so that we can ignore them in edge intersection
 													// but still use them in energy field calculation
+								*/
 							});
 						}
 					}
@@ -190,47 +198,6 @@ BubbleSets.prototype.addObstacles = function()
 			}
 		}
 	}
-}
-
-BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
-{
-	var ENERGY_COLOR_SCALE = _colorScale || ['#fef0d9','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#990000'];
-
-	// determine min/max (only consider positive numbers)
-	var w = this.w;
-	var h = this.h;
-	var minmax = [Number.MAX_VALUE, -Number.MAX_VALUE];
-	var energy = this.energy;
-	if (!scale) {
-		scale = 1 / this.resolution;
-	}
-
-	for (var i=0, index=0; i < h; i++) {
-		for (var j=0; j < w; j++, index++) {
-			e = energy[index];
-			if (e > 0) {
-				minmax[0] = Math.min(e, minmax[0]);
-				minmax[1] = Math.max(e, minmax[1]);
-			}	
-		}
-	}
-
-	var ctx = canvas.getContext("2d");
-	var colorScale = d3.scale.quantize().domain([minmax[0],minmax[1]]).range(ENERGY_COLOR_SCALE);
-	
-	for (var i=0, index=0, y=0; i < h; i++, y += scale) 
-	{
-		for (var j=0, x=0; j < w; j++, index++, x += scale) 
-		{
-			e = energy[index];
-			if (e > 0) {
-				ctx.fillStyle = colorScale(e);
-				ctx.fillRect(x, y, scale, scale);
-			}	
-		}
-	}
-
-	return minmax;
 }
 
 BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
@@ -314,11 +281,12 @@ BubbleSets.prototype.findConnectivityStep = function(set, lastStep)
 BubbleSets.prototype.edgeCollisionTest = function(u, v, obstacle)
 {	
 	var intersection = circleLineSegmentIntersect(u, v, obstacle, this.R0, this.R0Sq);
-	var collisionTest =
-		intersection.intersects == 2 &&
-		intersection.points && 
-		(intersection.points.length == 2 || intersection.points.length == 0);
-	
+	var collisionTest = 
+
+		intersection.intersects == 1 ||		// edge touches the obstacle in one point
+		intersection.intersects == 2 &&		// edge intersects obstacle in two points
+		intersection.points.length != 1;	// this excludes obstacles that completetly engulfs u or v 
+											// (can't do anything about 'em)
 	if (collisionTest) 
 	{
 		return intersection;
@@ -421,8 +389,8 @@ var SIN_THETA = Math.sin(45 * Math.PI / 180);
 
 BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 {
-	var PUSH_OUT = this.R0 * 1.5;
-
+	// amount to push out edge by
+	var PUSH_OUT = this.R0 * 1.7;
 
 	// start with a vector going from the center
 	// of the obstacle to the point that's perpendicular to the edge
@@ -439,9 +407,9 @@ BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 	}
 	normalize2(V);
 
+	var solution = null;
 	var iteration = 0;
 	var maxIterations = MAX_REROUTE_ITERATIONS;
-	var solution = null;
 
 	while (iteration < maxIterations)
 	{
@@ -494,7 +462,10 @@ BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 
 		if (badEdge && solution && !solution.itrLimited) 
 		{
-			// try this only 8 times
+			// reduce the number of iterations here, since 
+			// this is an exploratory, early-fix approach
+			// which can sometimes be fixed better in 
+			// a separate reRoute invole
 			maxIterations = iteration + 4*3;
 			solution.itrLimited = true;
 		}
@@ -510,36 +481,29 @@ BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 			if (iteration % 4 == 0) 
 			{
 				// increase push out
-				PUSH_OUT *= 1.4;
-				//console.log("1) push out: " + PUSH_OUT + ", V: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
-
+				PUSH_OUT *= 1.5;
 			}
 			else if (iteration % 4 == 1)
 			{
-				// increase pushout
 				// flip
 				V.x *= -1;
 				V.y *= -1;
-				PUSH_OUT /= 1.4;
-				//console.log("2) push out: " + PUSH_OUT + ", v: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
-
+				PUSH_OUT /= 1.5;
 			}
 			else if (iteration % 4 == 2)
 			{
-				PUSH_OUT *= 1.4;
-				//console.log("3) push out: " + PUSH_OUT + ", v: " + V.x.toFixed(2) + ", " + V.y.toFixed(2));
-
+				// increase push out
+				PUSH_OUT *= 1.5;
 			}
 			else if (iteration % 4 == 3)
 			{
-				PUSH_OUT /= 1.4;
+				// rotate
+				PUSH_OUT /= 1.5;
 				var vRotated = {
 					x: V.x * COS_THETA - V.y * SIN_THETA,
 					y: V.x * SIN_THETA + V.y * COS_THETA
 				};
 				V = vRotated;
-				//console.log("4) rotated: " + vRotated.x.toFixed(2) + ", " + vRotated.y.toFixed(2));
-
 			}
 		}
 		iteration++;
@@ -577,7 +541,7 @@ BubbleSets.prototype.calcEnergy = function(set)
 	var R1R0Sq = this.R1R0Sq;
 	var vEdges = set.vEdges;
 
-	var EDGE_W 		=  1.1;
+	var EDGE_W 		=  1.2;
 	var MEMBER_W 	=  1.0;
 	var JOINT_W 	=  0.5;
 	var OBSTACLE_W 	= -1.0; 
@@ -782,6 +746,47 @@ BubbleSets.prototype.floodFill = function(set, eThreshold)
 	}
 	console.log("Flood fill iterations: " + iterations);
 	return contourEdge;
+}
+
+BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
+{
+	var ENERGY_COLOR_SCALE = _colorScale || ['#fef0d9','#fdd49e','#fdbb84','#fc8d59','#ef6548','#d7301f','#990000'];
+
+	// determine min/max (only consider positive numbers)
+	var w = this.w;
+	var h = this.h;
+	var minmax = [Number.MAX_VALUE, -Number.MAX_VALUE];
+	var energy = this.energy;
+	if (!scale) {
+		scale = 1 / this.resolution;
+	}
+
+	for (var i=0, index=0; i < h; i++) {
+		for (var j=0; j < w; j++, index++) {
+			e = energy[index];
+			if (e > 0) {
+				minmax[0] = Math.min(e, minmax[0]);
+				minmax[1] = Math.max(e, minmax[1]);
+			}	
+		}
+	}
+
+	var ctx = canvas.getContext("2d");
+	var colorScale = d3.scale.quantize().domain([minmax[0],minmax[1]]).range(ENERGY_COLOR_SCALE);
+	
+	for (var i=0, index=0, y=0; i < h; i++, y += scale) 
+	{
+		for (var j=0, x=0; j < w; j++, index++, x += scale) 
+		{
+			e = energy[index];
+			if (e > 0) {
+				ctx.fillStyle = colorScale(e);
+				ctx.fillRect(x, y, scale, scale);
+			}	
+		}
+	}
+
+	return minmax;
 }
 
 BubbleSets.prototype.visualizeContourEdge = function(canvas, contour, _scale)

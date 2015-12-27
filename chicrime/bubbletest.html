@@ -55,7 +55,7 @@
 
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
-		var setSize = [20, 25];	// min/max size of set
+		var setSize = [35, 40];	// min/max size of set
 		var resolution = .15;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
@@ -70,7 +70,7 @@
 		var points = [];
 
 		// add a bunch more points
-		for (var i=0; i < 80; i++) {
+		for (var i=0; i < 120; i++) {
 			var x = Math.random() * (w-2*padding) + padding;
 			var y = Math.random() * (h-2*padding) + padding;
 			points.push({
