@@ -669,14 +669,80 @@ BubbleSets.prototype.clearEnergyBuffer = function()
 	}	
 }
 
-BubbleSets.prototype.floodFill = function(set, eThreshold)
+BubbleSets.prototype.extractBubbleContour = function(set, step)
+{
+	var MAX_THRESHOLD = 200;
+	var MIN_THRESHOLD = 30;
+	var STEP = -1 * (step || 10);
+	var threshold = MAX_THRESHOLD;
+
+	var bestSolution = null;
+	var bestHitCount = null;
+
+	// make a hit list of set members to see whether
+	// we're reaching all
+	var hitList = [];
+	for (var i=0, N=set.members.length; i<N; i++) 
+	{
+		hitList.push(
+		{
+			x: set.members[i].x,
+			y: set.members[i].y,
+		});
+	}
+
+	// loop interactively until we get all items hit (or run out of range)
+	while (MAX_THRESHOLD >= threshold && threshold >= MIN_THRESHOLD)
+	{
+		// flood fill
+		var contour = this.floodFill(set, threshold, hitList);
+		
+		// count hits, maintain list of missed hits
+		var result = {
+			hitCount:  0, 
+			misses: []
+		};
+		(function(hList, r) 
+		{
+			hList.forEach(function(target, i) {
+				if (target.hit) {
+					r.hitCount++;
+				} else {
+					r.misses.push(i);
+				}
+			});
+		})(hitList, result);
+
+		if (bestSolution === null || (bestHitCount < result.hitCount)) 
+		{
+			bestSolution = contour;
+			bestHitCount = result.hitCount;
+		}
+
+		if (result.hitCount == set.members.length) {
+			// optimal solution!
+			break;
+		}
+		else
+		{
+			threshold += STEP;
+		}
+	}
+
+	return {
+		contour: bestSolution,
+		hits: bestHitCount
+	};
+}
+
+BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 {
 	var pBB = set.pBB;
-	var w = this.w;
 	var w_0 = pBB.left;
 	var h_0 = pBB.top;
 	var w_1 = pBB.right;
 	var h_1 = pBB.bottom;
+	var w   = this.w;
 
 	// choose an arbitrary member of the set
 	var sX = Math.floor(set.members[0].x * this.resolution);
@@ -694,7 +760,7 @@ BubbleSets.prototype.floodFill = function(set, eThreshold)
 	var visited = {};
 
 	// keep track of conrour edges
-	var contourEdge = [];
+	var contour = [];
 
 	// flood q
 	var q = [];
@@ -707,45 +773,57 @@ BubbleSets.prototype.floodFill = function(set, eThreshold)
 		var p = q.pop();
 
 		// make sure pixel has not been visited before
-		if (visited[p.I]) {
+		if (visited[p.I]) 
+		{
 			continue;
 		}
-		
-		// mark as visited
+
+		// mark as visited / hit
 		visited[p.I] = true;
 
 		var x = p.x, y = p.y;
 		var X = x, Y = y << 16;
 		
-		// evaluate
+		// evaluate energy
 		var E = energy[y * w + x];
 		if (E <= eThreshold) 
 		{
-			contourEdge.push({x: x, y: y});
+			contour.push({x: x, y: y});
 		}
 		else
 		{
 			// calculate indices and add 8 neighboring cells, if within bounds
-			var xMinus = x > w_0	?  X-1 : null;
-			var xPlus  = x < w_1	?  X+1 : null;
-			var yMinus = y > h_0	? (y-1) << 16 : null;
-			var yPlus  = y < h_1  	? (y+1) << 16 : null;
+			var Xm = x > w_0 ?  x-1 		: null;
+			var Xp = x < w_1 ?  x+1 		: null;
+			var Ym = y > h_0 ? (y-1) << 16 	: null;
+			var Yp = y < h_1 ? (y+1) << 16 	: null;
 
 			var I;
-			I = Y+xMinus;		if (xMinus !== null && !visited[I]) 						q.push({ x: x-1, y: y,   I: I });
-			I = yMinus+xMinus;	if (xMinus !== null && yMinus !== null && !visited[I]) 		q.push({ x: x-1, y: y-1, I: I });
-			I = yPlus +xMinus;	if (xMinus !== null && yPlus  !== null && !visited[I]) 		q.push({ x: x-1, y: y+1, I: I });
-			
-			I = yMinus+X;		if (yMinus !== null && !visited[I]) 						q.push({ x: x, y: y-1, I: I });
-			I = yPlus +X;		if (yPlus  !== null && !visited[I]) 						q.push({ x: x, y: y+1, I: I });
-			
-			I = Y+xPlus;		if (xPlus  !== null && !visited[I]) 						q.push({ x: x+1, y: y, I: I});
-			I = yPlus+xPlus;	if (xPlus  !== null && yPlus !== null  && !visited[I]) 		q.push({ x: x+1, y: y+1, I: I});
-			I = yMinus+xPlus;	if (xPlus  !== null && yMinus !== null && !visited[I]) 		q.push({ x: x+1, y: y-1, I: I});
+			I = Y  + Xp;	if (Xp !== null                 && !visited[I]) q.push({ x: x+1, y: y  , I: I });
+			I = Yp + Xp;	if (Xp !== null && Yp !== null  && !visited[I]) q.push({ x: x+1, y: y+1, I: I });
+			I = Yp + X;		if (               Yp !== null  && !visited[I]) q.push({ x: x  , y: y+1, I: I });
+			I = Yp + Xm;	if (Xm !== null && Yp !== null  && !visited[I]) q.push({ x: x-1, y: y+1, I: I });
+			I = Y  + Xm;	if (Xm !== null                 && !visited[I]) q.push({ x: x-1, y: y  , I: I });
+			I = Ym + Xm;	if (Xm !== null && Ym !== null  && !visited[I]) q.push({ x: x-1, y: y-1, I: I });		
+			I = Ym + X;		if (               Ym !== null  && !visited[I]) q.push({ x: x  , y: y-1, I: I });
+			I = Ym + Xp;	if (Xp !== null && Ym !== null  && !visited[I]) q.push({ x: x+1, y: y-1, I: I });
 		}
 	}
-	console.log("Flood fill iterations: " + iterations);
-	return contourEdge;
+	//console.log("Flood fill iterations: " + iterations);
+	
+	// if hitList is provided, check whether we hit targets of the list
+	if (hitList) 
+	{
+		for (var i=0, N=hitList.length; i<N; i++) 
+		{
+			var target = hitList[i];
+			var xP = Math.floor(target.x * this.resolution);
+			var yP = Math.floor(target.y * this.resolution);
+			var I = xP + (yP << 16);
+			target.hit = (visited[I] === true);
+		}
+	}
+	return contour;
 }
 
 BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
@@ -1083,7 +1161,7 @@ UnionFind.prototype.Union = function(x, y)
 }
 
 // Kruska's minimum spanning tree
-// assumes a fully graph
+// assumes a fully-connected graph
 function KruskalMST(vertices, getWeight)
 {
 	var MST = [];
