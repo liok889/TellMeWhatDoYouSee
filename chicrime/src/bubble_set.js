@@ -778,11 +778,17 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 {
 	var pBB = set.pBB;
-	var w_0 = pBB.left;
-	var h_0 = pBB.top;
-	var w_1 = pBB.right;
-	var h_1 = pBB.bottom;
+	var w0 = pBB.left;
+	var h0 = pBB.top;
+	var w1 = pBB.right;
+	var h1 = pBB.bottom;
 	var w   = this.w;
+
+	var maskW = w1-w0+1;
+	var maskH = h1-h0+1;
+	var maskBuffer = ArrayBuffer(maskW * maskH);
+	var mask = new Int8Array(maskBuffer);
+
 
 	// choose an arbitrary member of the set
 	var sX = Math.floor(set.members[0].x * this.resolution);
@@ -790,21 +796,13 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 	var startP = {
 		x: sX,
 		y: sY,
-		I: sX + (sY << 16)
+		I: sX-w0 + (sY-h0)*maskW
 	};
 
 	// energy field
 	var energy = this.energy;
 
-	// keep track of visited pixels
-	var visited = {};
-
-	// keep track of the bottom left most contour point
-	var contourMap = {};
-	var contourLowestPoint = null;
-	var contourPointCount = 0;
-
-	// flood q
+	// flood starting from startO
 	var q = [];
 	q.push(startP);
 
@@ -813,47 +811,28 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 	{
 		iterations++;
 		var p = q.pop();
+		var x = p.x, y = p.y, I = p.I;
 
 		// make sure pixel has not been visited before
-		if (visited[p.I]) 
-		{
+		if (mask[I] != 0) {
 			continue;
 		}
-
-		// mark as visited / hit
-		visited[p.I] = true;
-
-		var x = p.x, y = p.y;
-		var X = x, Y = y << 16;
 		
 		// evaluate energy
 		var E = energy[y * w + x];
-		if (E <= eThreshold) 
+		mask[I] = E >= eThreshold ? 1 : -1;
+
+		if (E >= eThreshold) 
 		{
 
-			if (contourLowestPoint === null ) {
-				contourLowestPoint = {x: x, y: y};
-			}
-			else if (contourLowestPoint.x > x) {
-				contourLowestPoint = {x: x, y: y};
-			}
-			else if (contourLowestPoint.x == x && contourLowestPoint.y < y)
-			{
-				contourLowestPoint.y = y;
-			}
-
-			// mark as a contour in the energy field
-			contourMap[X + Y] = true;
-			contourPointCount++;
-		}
-		else
-		{
-			var Xm = x > w_0 ?  x-1 		: null;
-			var Xp = x < w_1 ?  x+1 		: null;
-			var Ym = y > h_0 ? (y-1) << 16 	: null;
-			var Yp = y < h_1 ? (y+1) << 16 	: null;
+			// determine legal moves
+			var Xm = x > w_0 ?  x-w0-1 			: null;
+			var Xp = x < w_1 ?  x-w0+1 			: null;
+			var Ym = y > h_0 ? (y-h0-1)*maskW  	: null;
+			var Yp = y < h_1 ? (y-h0+1)*maskW  	: null;
+			var X =  x-w0;
+			var Y = (y-h0)*maskW;
 			
-			// legal moves
 			var v = [
 				Yp !== null &&    true    ,
 				Yp !== null && Xm !== null,
@@ -866,16 +845,16 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			];
 
 
-			// make next move
-			var I;
-			I = Yp + X ; if (v[0] && !visited[I]) q.push({ x: x  , y: y+1, I: I });
-			I = Yp + Xm; if (v[1] && !visited[I]) q.push({ x: x-1, y: y+1, I: I });
-			I = Y  + Xm; if (v[2] && !visited[I]) q.push({ x: x-1, y: y  , I: I });
-			I = Ym + Xm; if (v[3] && !visited[I]) q.push({ x: x-1, y: y-1, I: I });
-			I = Ym + X ; if (v[4] && !visited[I]) q.push({ x: x  , y: y-1, I: I });
-			I = Ym + Xp; if (v[5] && !visited[I]) q.push({ x: x+1, y: y-1, I: I });
-			I = Y  + Xp; if (v[6] && !visited[I]) q.push({ x: x+1, y: y  , I: I });
-			I = Yp + Xp; if (v[7] && !visited[I]) q.push({ x: x+1, y: y+1, I: I });
+			// next moves
+			var nI;
+			nI = Yp + X ; if (v[0] && mask[nI]==0) q.push({ x: x  , y: y+1, I: nI });
+			nI = Yp + Xm; if (v[1] && mask[nI]==0) q.push({ x: x-1, y: y+1, I: nI });
+			nI = Y  + Xm; if (v[2] && mask[nI]==0) q.push({ x: x-1, y: y  , I: nI });
+			nI = Ym + Xm; if (v[3] && mask[nI]==0) q.push({ x: x-1, y: y-1, I: nI });
+			nI = Ym + X ; if (v[4] && mask[nI]==0) q.push({ x: x  , y: y-1, I: nI });
+			nI = Ym + Xp; if (v[5] && mask[nI]==0) q.push({ x: x+1, y: y-1, I: nI });
+			nI = Y  + Xp; if (v[6] && mask[nI]==0) q.push({ x: x+1, y: y  , I: nI });
+			nI = Yp + Xp; if (v[7] && mask[nI]==0) q.push({ x: x+1, y: y+1, I: nI });
 		}
 	}
 	//console.log("Flood fill iterations: " + iterations);
@@ -888,14 +867,64 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			var target = hitList[i];
 			var xP = Math.floor(target.x * this.resolution);
 			var yP = Math.floor(target.y * this.resolution);
-			var I = xP + (yP << 16);
-			target.hit = (visited[I] === true);
+			var I = xP-w0 + (yP-w0) * maskW;
+			target.hit = (mask[I] !== 0);
 		}
 	}
-	return {
-		pointCount: contourPointCount,
-		lowestPoint: contourLowestPoint,
-		contourMap: contourMap,
+	return mask;
+}
+
+function detectMaskEdge(mask, pBB)
+{
+	var maskW = pBB.right - pBB.left + 1;
+	var maskH = pBB.bottom - pBB.top + 1;
+	var w0 = pBB.left;
+	var h0 = pBB.top;
+
+	// contour data
+	var contourVertices = [];
+	var lowestRight = null;		// lowest, right-most point in the contour
+
+	for (var y=0; y < maskH; y++)
+	{
+		var inContour = false;
+		var rowOffset = y + maskW;
+		for (var x=0; x < maskW; x++)
+		{
+			var m = mask[rowOffset + x];
+			var p = null;
+			if ((m>0 && !inContour) || (m<0 && inContour)) 
+			{
+				p = { x: x + w0, y: y + h0 };
+				inContour = !inContour;
+			}
+			else if (m>0 && inContour && (y == 0 || mask[ (y-1)*maskW + x]))
+			{
+				p = {
+					x: x + w0, y: y + h0
+				};				
+			}
+
+			if (p !== null)
+			{
+				contourVertices.push(p);
+				if (lowestRight === null ) {
+					lowestRight = p;
+				}
+				else if (lowestRight.x > p.x) {
+					lowestRight = p;
+				}
+				else if (lowestRight.x == p.x && lowestRight.y < p.y)
+				{
+					lowestRight = p;
+				}
+			}
+		}
+	}
+	return
+	{
+		contour: contourVertices,
+		lowestRight: lowestRight
 	};
 }
 
