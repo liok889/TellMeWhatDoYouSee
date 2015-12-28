@@ -848,21 +848,34 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 		}
 		else
 		{
-			// calculate indices and add 8 neighboring cells, if within bounds
 			var Xm = x > w_0 ?  x-1 		: null;
 			var Xp = x < w_1 ?  x+1 		: null;
 			var Ym = y > h_0 ? (y-1) << 16 	: null;
 			var Yp = y < h_1 ? (y+1) << 16 	: null;
+			
+			// legal moves
+			var v = [
+				Yp !== null &&    true    ,
+				Yp !== null && Xm !== null,
+				    true    && Xm !== null,
+				Ym !== null && Xm !== null,
+				Ym !== null &&    true    ,
+				Ym !== null && Xp !== null,
+				    true    && Xp !== null,
+				Yp !== null && Xp !== null
+			];
 
+
+			// make next move
 			var I;
-			I = Y  + Xp;	if (Xp !== null                 && !visited[I]) q.push({ x: x+1, y: y  , I: I });
-			I = Yp + Xp;	if (Xp !== null && Yp !== null  && !visited[I]) q.push({ x: x+1, y: y+1, I: I });
-			I = Yp + X;		if (               Yp !== null  && !visited[I]) q.push({ x: x  , y: y+1, I: I });
-			I = Yp + Xm;	if (Xm !== null && Yp !== null  && !visited[I]) q.push({ x: x-1, y: y+1, I: I });
-			I = Y  + Xm;	if (Xm !== null                 && !visited[I]) q.push({ x: x-1, y: y  , I: I });
-			I = Ym + Xm;	if (Xm !== null && Ym !== null  && !visited[I]) q.push({ x: x-1, y: y-1, I: I });		
-			I = Ym + X;		if (               Ym !== null  && !visited[I]) q.push({ x: x  , y: y-1, I: I });
-			I = Ym + Xp;	if (Xp !== null && Ym !== null  && !visited[I]) q.push({ x: x+1, y: y-1, I: I });
+			I = Yp + X ; if (v[0] && !visited[I]) q.push({ x: x  , y: y+1, I: I });
+			I = Yp + Xm; if (v[1] && !visited[I]) q.push({ x: x-1, y: y+1, I: I });
+			I = Y  + Xm; if (v[2] && !visited[I]) q.push({ x: x-1, y: y  , I: I });
+			I = Ym + Xm; if (v[3] && !visited[I]) q.push({ x: x-1, y: y-1, I: I });
+			I = Ym + X ; if (v[4] && !visited[I]) q.push({ x: x  , y: y-1, I: I });
+			I = Ym + Xp; if (v[5] && !visited[I]) q.push({ x: x+1, y: y-1, I: I });
+			I = Y  + Xp; if (v[6] && !visited[I]) q.push({ x: x+1, y: y  , I: I });
+			I = Yp + Xp; if (v[7] && !visited[I]) q.push({ x: x+1, y: y+1, I: I });
 		}
 	}
 	//console.log("Flood fill iterations: " + iterations);

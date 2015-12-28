@@ -122,7 +122,7 @@
 		bubbles.computeBubbleSet(bubbleSet0);
 		drawExtra(bubbleSet0);
 		var processTime = "" + (((new Date()).getTime() - startTime.getTime()) / 1000).toFixed(2);
-		//var eExtent = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+		var eExtent = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
 		var contour = bubbles.extractBubbleContour(bubbleSet0);
 		if (contour) {
 			drawContour(contour.contour);
