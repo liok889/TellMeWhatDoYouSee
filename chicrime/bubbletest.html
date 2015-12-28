@@ -56,7 +56,7 @@
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
 		var setSize = [35, 40];	// min/max size of set
-		var resolution = .2;	// resolution of bubble set's energy field (relative to size of canvas)
+		var resolution = .1;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
 		var canvas = d3.select("#bubbleCanvas");
@@ -122,16 +122,14 @@
 		bubbles.computeBubbleSet(bubbleSet0);
 		drawExtra(bubbleSet0);
 		var processTime = "" + (((new Date()).getTime() - startTime.getTime()) / 1000).toFixed(2);
-		var eExtent = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+		//var eExtent = bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
 		var contour = bubbles.extractBubbleContour(bubbleSet0);
 		if (contour) {
 			drawContour(contour.contour);
 		}
-
-
-
 		console.log("Bubble set took: " + processTime + " seconds.");
-		console.log("energy field min/max: " + eExtent[0].toFixed(2) + " ... " + eExtent[1].toFixed(2))
+		
+		//console.log("energy field min/max: " + eExtent[0].toFixed(2) + " ... " + eExtent[1].toFixed(2))
 		// set callback on keyboard
 		/*
 		d3.select("body").on("keydown", function() {
@@ -165,7 +163,7 @@
 
 			if (!ret) {
 				bubbles.computeBubbleSet(bubbleSet0);
-				bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
+				//bubbles.visualizeEnergyField( canvas.node(), 1/resolution );
 				endStep = true;
 			}
 		}
@@ -175,14 +173,14 @@
 			var pathGenerator = d3.svg.line()
 				.x(function(d) { return d.x; })
 				.y(function(d) { return d.y; })
-				.interpolate("linear");
+				.interpolate("basis-closed");
 
 			svg.append("path")
 				.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) + ")")
 				.attr("d", pathGenerator(contour))
 				.style("stroke-width", "0.5px")
 				.style("stroke", "#80d5ff")
-				.style("fill", "none")
+				.style("fill", "#80d5ff")
 				.style("fill-opacity", "0.6");
 		}
 

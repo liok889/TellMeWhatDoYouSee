@@ -574,13 +574,13 @@ BubbleSets.prototype.calcEnergy = function(set)
 	// loop through all pixels
 	for (var row=pBB.top, bottom = pBB.bottom; row <= bottom; row++)
 	{
-		var pY = row * iR;
+		var pY = (row+.5) * iR;
 		var rowOffset = row * w;
 		var hitMap = {};			// map of nodes we hit
 
 		for (var col=pBB.left, right=pBB.right; col <= right; col++)
 		{
-			var pX = col * iR;
+			var pX = (col+.5) * iR;
 			var E = 0;
 
 			// accumilate contribution from set members
@@ -672,7 +672,7 @@ BubbleSets.prototype.clearEnergyBuffer = function()
 BubbleSets.prototype.extractBubbleContour = function(set, step)
 {
 	var MAX_THRESHOLD = 200;
-	var MIN_THRESHOLD = 30;
+	var MIN_THRESHOLD = 20;
 	var STEP = -1 * (step || 10);
 	var threshold = MAX_THRESHOLD;
 
@@ -695,7 +695,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 	while (MAX_THRESHOLD >= threshold && threshold >= MIN_THRESHOLD)
 	{
 		// flood fill
-		var contour = this.floodFill(set, threshold, hitList);
+		var contourData = this.floodFill(set, threshold, hitList);
 		
 		// count hits, maintain list of missed hits
 		var result = {
@@ -715,7 +715,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 
 		if (bestSolution === null || (bestHitCount < result.hitCount)) 
 		{
-			bestSolution = contour;
+			bestSolution = contourData;
 			bestHitCount = result.hitCount;
 		}
 
@@ -729,8 +729,48 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 		}
 	}
 
+	var contour = null;
+	if (bestSolution)
+	{
+		// see which points the contour will be engulfing (we'll use this as a terminatino test)
+		var engulf = {
+			left:    Number.MAX_VALUE,
+			right:  -Number.MAX_VALUE,
+			top:     Number.MAX_VALUE,
+			bottom: -Number.MAX_VALUE 
+		};
+
+		for (var i=0, N=hitList.length; i<N; i++) 
+		{
+			var target = hitList[i];
+			if (target.hit)
+			{
+				var x = Math.floor(target.x * this.resolution);
+				var y = Math.floor(target.y * this.resolution);
+
+				engulf.left   = Math.min( engulf.left,   x);
+				engulf.right  = Math.max( engulf.right,  x);
+				engulf.top    = Math.min( engulf.top,    y);
+				engulf.bottom = Math.max( engulf.bottom, y);
+			}
+					
+		}
+
+		console.log("flood fill complete. covered: " + bestHitCount + " / " + set.members.length + " at " + threshold);
+		console.log("lowestPoint: " + contourData.lowestPoint.x + ", " + contourData.lowestPoint.y + ", points in contour: " + contourData.pointCount);
+		contour = traceContour
+		(
+			contourData.lowestPoint,
+			contourData.contourMap,
+			contourData.pointCount,
+			set.pBB,
+			engulf
+		);
+		console.log("contour has: " + contour.length + " / " + contourData.pointCount );
+	}
+
 	return {
-		contour: bestSolution,
+		contour: contour,
 		hits: bestHitCount
 	};
 }
@@ -759,8 +799,10 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 	// keep track of visited pixels
 	var visited = {};
 
-	// keep track of conrour edges
-	var contour = [];
+	// keep track of the bottom left most contour point
+	var contourMap = {};
+	var contourLowestPoint = null;
+	var contourPointCount = 0;
 
 	// flood q
 	var q = [];
@@ -788,7 +830,21 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 		var E = energy[y * w + x];
 		if (E <= eThreshold) 
 		{
-			contour.push({x: x, y: y});
+
+			if (contourLowestPoint === null ) {
+				contourLowestPoint = {x: x, y: y};
+			}
+			else if (contourLowestPoint.x > x) {
+				contourLowestPoint = {x: x, y: y};
+			}
+			else if (contourLowestPoint.x == x && contourLowestPoint.y < y)
+			{
+				contourLowestPoint.y = y;
+			}
+
+			// mark as a contour in the energy field
+			contourMap[X + Y] = true;
+			contourPointCount++;
 		}
 		else
 		{
@@ -812,7 +868,7 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 	//console.log("Flood fill iterations: " + iterations);
 	
 	// if hitList is provided, check whether we hit targets of the list
-	if (hitList) 
+	if (hitList)
 	{
 		for (var i=0, N=hitList.length; i<N; i++) 
 		{
@@ -823,7 +879,118 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			target.hit = (visited[I] === true);
 		}
 	}
+	return {
+		pointCount: contourPointCount,
+		lowestPoint: contourLowestPoint,
+		contourMap: contourMap,
+	};
+}
+
+function traceContour(start, contourMap, pointCount, pBB, engulfTest)
+{
+	var w_0 = pBB.left;
+	var h_0 = pBB.top;
+	var w_1 = pBB.right;
+	var h_1 = pBB.bottom;
+
+	// area contour has engulfed so far
+	var contourEngulf = {
+		left:    Number.MAX_VALUE,
+		right:  -Number.MAX_VALUE,
+		top:     Number.MAX_VALUE,
+		bottom: -Number.MAX_VALUE 
+	};
+
+	// contour map to build	
+	var contour = [];
+	var backtrack = [];
+
+	// set starting coordinate
+	var p = start;
+	var repititions = 0;
+	var consumed = 0;
+
+	while ((p !== null || backtrack.length > 0) && (consumed < pointCount) )
+	{
+		var visited = false;
+		if (p === null) 
+		{
+			if (backtrack.length > 0) 
+			{
+				p = backtrack.pop();
+				repititions++;
+				visited = true;
+			}
+			else {
+				break;	
+			}
+		}
+		var x = p.x, y = p.y;
+		var X = x, Y = y << 16;
+		var I = X+Y;
+
+		if (!visited) {
+			contour.push(p);
+			contourEngulf.left   = Math.min(contourEngulf.left  , p.x);
+			contourEngulf.right  = Math.max(contourEngulf.right , p.x);
+			contourEngulf.top    = Math.min(contourEngulf.top   , p.y);
+			contourEngulf.bottom = Math.max(contourEngulf.bottom, p.y);		
+		}
+
+		if (contourMap[I]) 
+		{
+			backtrack.push(p);
+			contourMap[I] = false;
+			consumed++;
+		}
+
+		// termination test
+		if (p != start && Math.abs(start.x-p.x) <= 2 && Math.abs(start.y-p.y) <= 2) {
+			if (
+				contourEngulf.left   <= engulfTest.left  &&
+				contourEngulf.right  >= engulfTest.right &&
+				contourEngulf.top    <= engulfTest.top   &&
+				contourEngulf.bottom >= engulfTest.bottom
+			) {
+				break;
+			}
+		}
+
+		var Xm = x > w_0 ?  x-1 		: null;
+		var Xp = x < w_1 ?  x+1 		: null;
+		var Ym = y > h_0 ? (y-1) << 16 	: null;
+		var Yp = y < h_1 ? (y+1) << 16 	: null;
+		
+		// legal moves
+		var v = [
+			Yp !== null &&    true    ,
+			Yp !== null && Xm !== null,
+			    true    && Xm !== null,
+			Ym !== null && Xm !== null,
+			Ym !== null &&    true    ,
+			Ym !== null && Xp !== null,
+			    true    && Xp !== null,
+			Yp !== null && Xp !== null
+		];
+
+
+		// make next move
+		if      (v[0] && contourMap[Yp + X ]) p = { x: x  , y: y+1 };
+		else if (v[1] && contourMap[Yp + Xm]) p = { x: x-1, y: y+1 };
+		else if (v[2] && contourMap[Y  + Xm]) p = { x: x-1, y: y   };
+		else if (v[3] && contourMap[Ym + Xm]) p = { x: x-1, y: y-1 };
+		else if (v[4] && contourMap[Ym + X ]) p = { x: x  , y: y-1 };
+		else if (v[5] && contourMap[Ym + Xp]) p = { x: x+1, y: y-1 };
+		else if (v[6] && contourMap[Y  + Xp]) p = { x: x+1, y: y   };
+		else if (v[7] && contourMap[Yp + Xp]) p = { x: x+1, y: y+1 };
+		else
+			p = null;
+
+	}
+
+	//contour.push(start);
 	return contour;
+
 }
 
 BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
