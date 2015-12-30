@@ -671,7 +671,7 @@ BubbleSets.prototype.clearEnergyBuffer = function()
 
 BubbleSets.prototype.extractBubbleContour = function(set, step)
 {
-	var MAX_THRESHOLD = 200;
+	var MAX_THRESHOLD = 120;
 	var MIN_THRESHOLD = 20;
 	var STEP = -1 * (step || 10);
 	var threshold = MAX_THRESHOLD;
@@ -695,7 +695,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 	while (MAX_THRESHOLD >= threshold && threshold >= MIN_THRESHOLD)
 	{
 		// flood fill
-		var contourData = this.floodFill(set, threshold, hitList);
+		var floodMask = this.floodFill(set, threshold, hitList);
 		
 		// count hits, maintain list of missed hits
 		var result = {
@@ -715,7 +715,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 
 		if (bestSolution === null || (bestHitCount < result.hitCount)) 
 		{
-			bestSolution = contourData;
+			bestSolution = floodMask;
 			bestHitCount = result.hitCount;
 		}
 
@@ -732,7 +732,8 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 	var contour = null;
 	if (bestSolution)
 	{
-		// see which points the contour will be engulfing (we'll use this as a terminatino test)
+		// see which points the contour will be engulfing 
+		// (we'll use this as a termination test)
 		var engulf = {
 			left:    Number.MAX_VALUE,
 			right:  -Number.MAX_VALUE,
@@ -745,6 +746,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 			var target = hitList[i];
 			if (target.hit)
 			{
+				// include this point in the test
 				var x = Math.floor(target.x * this.resolution);
 				var y = Math.floor(target.y * this.resolution);
 
@@ -752,17 +754,18 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 				engulf.right  = Math.max( engulf.right,  x);
 				engulf.top    = Math.min( engulf.top,    y);
 				engulf.bottom = Math.max( engulf.bottom, y);
-			}
-					
+			}		
 		}
 
+		// detect the edge of the mask
+		var contourData = detectMaskEdge(bestSolution, set.pBB);
+
 		console.log("flood fill complete. covered: " + bestHitCount + " / " + set.members.length + " at " + threshold);
-		console.log("lowestPoint: " + contourData.lowestPoint.x + ", " + contourData.lowestPoint.y + ", points in contour: " + contourData.pointCount);
-		contour = traceContour
-		(
-			contourData.lowestPoint,
-			contourData.contourMap,
-			contourData.pointCount,
+		console.log("lowestPoint: " + contourData.lowestRight.x + ", " + contourData.lowestRight.y + ", points in contour: " + contourData.contourVertices.length);
+		
+		contour = traceContour(
+			contourData.lowestRight,
+			contourData.contourVertices, 
 			set.pBB,
 			engulf
 		);
@@ -786,8 +789,9 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 
 	var maskW = w1-w0+1;
 	var maskH = h1-h0+1;
-	var maskBuffer = ArrayBuffer(maskW * maskH);
+	var maskBuffer = new ArrayBuffer(maskW * maskH);
 	var mask = new Int8Array(maskBuffer);
+	var filled = [];
 
 
 	// choose an arbitrary member of the set
@@ -824,12 +828,13 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 
 		if (E >= eThreshold) 
 		{
+			filled.push(p);
 
 			// determine legal moves
-			var Xm = x > w_0 ?  x-w0-1 			: null;
-			var Xp = x < w_1 ?  x-w0+1 			: null;
-			var Ym = y > h_0 ? (y-h0-1)*maskW  	: null;
-			var Yp = y < h_1 ? (y-h0+1)*maskW  	: null;
+			var Xm = x > w0 ?  x-w0-1 			: null;
+			var Xp = x < w1 ?  x-w0+1 			: null;
+			var Ym = y > h0 ? (y-h0-1)*maskW  	: null;
+			var Yp = y < h1 ? (y-h0+1)*maskW  	: null;
 			var X =  x-w0;
 			var Y = (y-h0)*maskW;
 			
@@ -871,6 +876,17 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			target.hit = (mask[I] !== 0);
 		}
 	}
+
+	if (svg) {
+		svg.selectAll("rect.contour").data(filled).enter().append("rect")
+			.attr("x", function(d) { return d.x / resolution; })
+			.attr("y", function(d) { return d.y / resolution; })
+			.style("fill", "black")
+			.attr("width", 1/resolution)
+			.attr("height", 1/resolution)
+	}
+
+
 	return mask;
 }
 
@@ -883,27 +899,52 @@ function detectMaskEdge(mask, pBB)
 
 	// contour data
 	var contourVertices = [];
+	var contourMap = {};
 	var lowestRight = null;		// lowest, right-most point in the contour
+	var prevContourState = null;
 
 	for (var y=0; y < maskH; y++)
 	{
 		var inContour = false;
-		var rowOffset = y + maskW;
+		var rowOffset = y * maskW;
+		var contourState = [];
+
 		for (var x=0; x < maskW; x++)
 		{
+			contourState.push(inContour);
 			var m = mask[rowOffset + x];
 			var p = null;
-			if ((m>0 && !inContour) || (m<0 && inContour)) 
+			if (m>0 && !inContour) 
 			{
 				p = { x: x + w0, y: y + h0 };
 				inContour = !inContour;
 			}
-			else if (m>0 && inContour && (y == 0 || mask[ (y-1)*maskW + x]))
+			else if (m<0 && inContour) 
+			{
+				p = { x: x + w0, y: y + h0 };
+				inContour = !inContour;	
+			}
+			else if (m>0 && inContour && (y == 0 || mask[ (y-1)*maskW + x]<1))
 			{
 				p = {
 					x: x + w0, y: y + h0
 				};				
 			}
+
+			if (y>0 && prevContourState[x] && !inContour) {
+				p = {
+					x: x + w0, y: y + h0
+				};					
+			}
+			
+			
+			else if (m<0 && !inContour && (y > 0 && mask[ (y-1)*maskW + x]<1))
+			{
+				p = {
+					x: x + w0, y: y + h0
+				};					
+			}
+			
 
 			if (p !== null)
 			{
@@ -919,23 +960,56 @@ function detectMaskEdge(mask, pBB)
 					lowestRight = p;
 				}
 			}
+
 		}
+		prevContourState = contourState;
+
+		// make sure right edges are connected to their top
+		/*
+		if (y > 0) {
+			for (var i=0, E=rightEdges.length; i<E; i++)
+			{
+				var p = rightEdges[i];
+				for (var x=p.x+1; x < maskW; x++) {
+					if (mask[(y-1) * maskW + x]<1) {
+
+					}
+				}
+			}
+		}
+		*/
+
 	}
-	return
-	{
-		contour: contourVertices,
-		lowestRight: lowestRight
-	};
+
+	// draw contour
+	if (svg) {
+		svg.selectAll("rect.contour").data(contourVertices).enter().append("rect")
+			.attr("x", function(d) { return d.x / resolution; })
+			.attr("y", function(d) { return d.y / resolution; })
+			.style("fill", "red")
+			.attr("width", 1/resolution)
+			.attr("height", 1/resolution)
+	}
+	console.log("Edge detect: v: " + contourVertices.length + ", lowestRight: " + lowestRight.x + ", " + lowestRight.y);
+	return { contourVertices: contourVertices, lowestRight: lowestRight };
 }
 
-function traceContour(start, contourMap, pointCount, pBB, engulfTest)
+function traceContour(start, contourVertices, pBB, engulfTest)
 {
 	var w_0 = pBB.left;
 	var h_0 = pBB.top;
 	var w_1 = pBB.right;
 	var h_1 = pBB.bottom;
 
-	// area contour has engulfed so far
+	// convert list of vertices to a map
+	var contourMap = {};
+	for (var i=0, N=contourVertices.length; i<N; i++) 
+	{
+		v = contourVertices[i];
+		contourMap[ v.x + (v.y << 16) ] = true;
+	}
+
+	// area (bounding box) contour has engulfed so far
 	var contourEngulf = {
 		left:    Number.MAX_VALUE,
 		right:  -Number.MAX_VALUE,
@@ -949,10 +1023,10 @@ function traceContour(start, contourMap, pointCount, pBB, engulfTest)
 
 	// set starting coordinate
 	var p = start;
-	var repititions = 0;
 	var consumed = 0;
+	var backtracked = 0;
 
-	while ((p !== null || backtrack.length > 0) && (consumed < pointCount) )
+	while ((p !== null || backtrack.length > 0))
 	{
 		var visited = false;
 		if (p === null) 
@@ -960,10 +1034,12 @@ function traceContour(start, contourMap, pointCount, pBB, engulfTest)
 			if (backtrack.length > 0) 
 			{
 				p = backtrack.pop();
-				repititions++;
+				contour.pop();
 				visited = true;
+				backtracked++;
 			}
 			else {
+				// nothing to backtrack to
 				break;	
 			}
 		}
@@ -1025,14 +1101,16 @@ function traceContour(start, contourMap, pointCount, pBB, engulfTest)
 		else if (v[5] && contourMap[Ym + Xp]) p = { x: x+1, y: y-1 };
 		else if (v[6] && contourMap[Y  + Xp]) p = { x: x+1, y: y   };
 		else if (v[7] && contourMap[Yp + Xp]) p = { x: x+1, y: y+1 };
-		else
+		else {
+			console.log("trace route p=null");
 			p = null;
+		}
 
 	}
+	console.log("consumed: " + consumed + " / " + contourVertices.length);
+	console.log("backtracked: " + backtracked);
 
-	//contour.push(start);
 	return contour;
-
 }
 
 BubbleSets.prototype.visualizeEnergyField = function(canvas, scale, _colorScale)
