@@ -56,7 +56,7 @@
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
 		var setSize = [35, 40];	// min/max size of set
-		var resolution = .25;	// resolution of bubble set's energy field (relative to size of canvas)
+		var resolution = .15;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
 		var canvas = d3.select("#bubbleCanvas");
@@ -170,15 +170,17 @@
 
 		function drawContour(contour)
 		{
+			var data = Array.isArray(contour[0]) ? contour : [contour];
+
 			var pathGenerator = d3.svg.line()
 				.x(function(d) { return d.x; })
 				.y(function(d) { return d.y; })
 				.interpolate("basis-closed");
-
 			
-			svg.append("path")
+			svg.selectAll("path.contour").data(data).enter().append("path")
+				.attr("d", function(d) { return pathGenerator(d); })
+				.attr("class", "contour")
 				.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) + ")")
-				.attr("d", pathGenerator(contour))
 				.style("stroke-width", "0.5px")
 				.style("stroke", "#80d5ff")
 				.style("fill", "#80d5ff")

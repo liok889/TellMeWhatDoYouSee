@@ -757,6 +757,7 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 			}		
 		}
 
+		/*
 		// detect the edge of the mask
 		var contourData = detectMaskEdge(bestSolution, set.pBB);
 
@@ -770,6 +771,9 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 			engulf
 		);
 		console.log("contour has: " + contour.length + " / " + contourData.pointCount );
+		*/
+
+		contour = this.marchingSquares(bestSolution, set.pBB, threshold);
 	}
 
 	return {
@@ -877,6 +881,7 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 		}
 	}
 
+	/*
 	if (svg) {
 		svg.selectAll("rect.contour").data(filled).enter().append("rect")
 			.attr("x", function(d) { return d.x / resolution; })
@@ -885,9 +890,396 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			.attr("width", 1/resolution)
 			.attr("height", 1/resolution)
 	}
-
+	*/
 
 	return mask;
+}
+
+BubbleSets.prototype.marchingSquares = function(mask, pBB, threshold)
+{
+
+	// contour state
+	var CONTOUR_STATE = {};
+	CONTOUR_STATE[ (0 << 0) + (0 << 1) + (0 << 2) + (0 << 3) ] = null;
+	CONTOUR_STATE[ (1 << 0) + (0 << 1) + (0 << 2) + (0 << 3) ] = [1,4];
+	CONTOUR_STATE[ (1 << 0) + (1 << 1) + (0 << 2) + (0 << 3) ] = [2,4];
+	CONTOUR_STATE[ (1 << 0) + (0 << 1) + (1 << 2) + (0 << 3) ] = [1,3];
+	CONTOUR_STATE[ (1 << 0) + (0 << 1) + (0 << 2) + (1 << 3) ] = [1,2,3,4, 2,3,4,1];	// 9 (1010)
+	CONTOUR_STATE[ (0 << 0) + (1 << 1) + (0 << 2) + (0 << 3) ] = [1,2];
+	CONTOUR_STATE[ (0 << 0) + (1 << 1) + (1 << 2) + (0 << 3) ] = [2,3,1,4, 1,2,4,1];	// 6 (0101)
+	CONTOUR_STATE[ (0 << 0) + (1 << 1) + (0 << 2) + (1 << 3) ] = [1,3];
+	CONTOUR_STATE[ (0 << 0) + (0 << 1) + (1 << 2) + (0 << 3) ] = [3,4];
+	CONTOUR_STATE[ (0 << 0) + (0 << 1) + (1 << 2) + (1 << 3) ] = [2,4];
+	CONTOUR_STATE[ (0 << 0) + (0 << 1) + (0 << 2) + (1 << 3) ] = [2,3];
+	CONTOUR_STATE[ (1 << 0) + (1 << 1) + (1 << 2) + (0 << 3) ] = [2,3];
+	CONTOUR_STATE[ (1 << 0) + (1 << 1) + (0 << 2) + (1 << 3) ] = [3,4];
+	CONTOUR_STATE[ (1 << 0) + (0 << 1) + (1 << 2) + (1 << 3) ] = [1,2];
+	CONTOUR_STATE[ (0 << 0) + (1 << 1) + (1 << 2) + (1 << 3) ] = [1,4];
+	CONTOUR_STATE[ (1 << 0) + (1 << 1) + (1 << 2) + (1 << 3) ] = null;
+
+	var CONTOUR_EDGE_CENTER = [
+		null,
+		{x: 0.5, y: 0.0},
+		{x: 1.0, y: 0.5},
+		{x: 0.5, y: 1.0},
+		{x: 0.0, y: 0.5}
+	];
+
+	var done = false;
+
+	// boundaries
+	var maskW = pBB.right - pBB.left + 1;
+	var maskH = pBB.bottom - pBB.top + 1;
+
+	// contour vertices
+	var contourVertices = [];
+
+	// iso-contours
+	var contourMap = {};
+
+	var startP = null;
+
+	for (var y=0, yBound=maskH-1; y <= yBound; y++)
+	{
+		var yOffset = maskW * y;
+		for (var x=0, xBound=maskW-1; x <= xBound; x++)
+		{
+			var bitIndex = 0;
+			var Y = y << 16;
+
+			bitIndex += 		(mask[yOffset + x] 					> 0 ? 1 : 0);
+			bitIndex += 		(mask[yOffset + x+1] 				> 0 ? 1 : 0) << 1;
+			bitIndex +=			(mask[yOffset + x   + maskW] 		> 0 ? 1 : 0) << 2;
+			bitIndex +=			(mask[yOffset + x+1 + maskW] 		> 0 ? 1 : 0) << 3;
+
+			// look up trajectory index
+			var state = CONTOUR_STATE[ bitIndex ]
+			if (state) 
+			{
+				if (state.length == 8)
+				{
+					console.log("\tSaddle point");
+					// disambiguiate sadle point
+					var w = this.w;
+					var E = 
+						this.energy[ w*(pBB.top+y)   + pBB.left + x   ] +
+						this.energy[ w*(pBB.top+y+1) + pBB.left + x   ] +
+						this.energy[ w*(pBB.top+y)   + pBB.left + x+1 ] +
+						this.energy[ w*(pBB.top+y+1) + pBB.left + x+1 ];
+					
+					if (E >= threshold) 
+					{
+						// mid point is black, select the first 4
+						var newState = [state[0], state[1], state[2], state[3]] 
+						state = newState;
+					}
+					else
+					{
+						var newState = [state[4], state[5], state[6], state[7]];
+						state = newState;
+					}
+								
+				}
+
+				var vertices = [];
+				var lastE = null, lastV = null;;
+				for (var i=0; i<state.length; i++) 
+				{
+					var e = CONTOUR_EDGE_CENTER[ state[i] ];
+					var v = {
+						x: x + e.x + pBB.left, 
+						y: y + e.y + pBB.top , 
+					};
+
+					if (i % 2 > 0) 
+					{
+						v.dX = e.x - lastE.x;
+						v.dY = e.y - lastE.y;
+
+						lastV.dX = v.dX;
+						lastV.dY = v.dY;
+					}
+
+
+					// add vertices
+					contourVertices.push(v);
+					vertices.push(v);
+
+					// maintain memory to last Edge / vertex
+					lastE = e;
+					lastV = v;
+				}
+				
+				// add to contour map
+				contourMap[x+Y] = vertices;
+
+				if (!startP) {
+					startP = {x: x, y: y, v: vertices};
+				}
+			}
+		}
+	}
+
+	console.log("contour vertices after marching squares: " + contourVertices.length);
+
+	/*
+	if (svg) {
+		svg.selectAll("line.contourEdge").data(contourVertices).enter().append("line")
+			.attr("x1", function(d) { return d.x / resolution; })
+			.attr("y1", function(d) { return d.y / resolution; })
+			.attr("x2", function(d) { return (d.x+d.dX) / resolution; })
+			.attr("y2", function(d) { return (d.y+d.dY) / resolution; })
+			.style("stroke", "red")
+			//.attr("width", 1/resolution)
+			//.attr("height", 1/resolution);
+	}
+	*/
+
+	// detect contour edges
+	var allContours = traceAllContours(startP, contourVertices, contourMap, pBB);
+	return allContours;
+
+}
+
+
+function traceAllContours(startP, contourVertices, contourMap, pBB)
+{
+	// contours; this is where we will store results
+
+	// boundaries
+	var w_0 = 0; pBB.left;
+	var h_0 = 0; pBB.top;
+	var w_1 = Number.MAX_VALUE;
+	var h_1 = Number.MAX_VALUE;
+
+	var contours = [];			// all contours we discovered so far
+	var curContour = [];		// current contour we're building
+	var curActiveList = [];		// vertices that we suspect will eventually form a contour
+	
+	var p = startP;
+	var lastV = null;
+
+	// deal with startP if it's a saddle point
+	if (startP.v.length > 2) 
+	{
+		curActiveList.push({
+			x: startP.x,
+			y: startP.y,
+			v: startP.v.splice(2, 2)
+		});
+	}
+
+	var lastPixel = null;
+	var firstSwitch = true;
+	var lastStep = 0;
+	while ( p !== null || curActiveList.length > 0)
+	{
+		if (p === null) 
+		{
+			p = curActiveList.pop();
+		}
+
+		// add contour point
+		curContour.push( p.v[0] );
+		if (p.v.length > 1) 
+		{
+			curContour.push( p.v[1] );
+			lastV = p.v[1];
+		}
+		else
+		{
+			lastV = p.v[0];
+		}
+
+		var x = p.x, y = p.y;
+		var X = x, Y = y << 16;
+		var I = X+Y;
+		contourMap[I] = null;
+
+		/*
+		if (svg && p !== null) {
+			var update = svg.append("rect")
+				.attr("class", "selector")
+				.attr("width", 1/resolution)
+				.attr("height", 1/resolution)
+				.style("fill", "red")
+				.attr("x", (pBB.left + p.x)/resolution)
+				.attr("y", (pBB.top + p.y)/resolution)
+
+			if (lastPixel) {
+				lastPixel.style("fill", firstSwitch ? "blue" : "green");
+				firstSwitch = false;
+			}
+			lastPixel = update;
+		}
+		*/
+
+		// trace the contour
+		var Xm = x > w_0 ?  x-1 		: null;
+		var Xp = x < w_1 ?  x+1 		: null;
+		var Ym = y > h_0 ? (y-1) << 16 	: null;
+		var Yp = y < h_1 ? (y+1) << 16 	: null;
+		
+		// legal moves
+		var v = [
+			Yp !== null &&    true    ,
+			Yp !== null && Xm !== null,
+			    true    && Xm !== null,
+			Ym !== null && Xm !== null,
+			Ym !== null &&    true    ,
+			Ym !== null && Xp !== null,
+			    true    && Xp !== null,
+			Yp !== null && Xp !== null
+		];
+
+		var II = [
+			Yp + X, 
+			Yp + Xm,
+			Y  + Xm,
+			Ym + Xm,
+			Ym + X, 
+			Ym + Xp,
+			Y  + Xp,
+			Yp + Xp
+		];
+		var ii = [
+			{ x: x  , y: y+1}, 
+			{ x: x-1, y: y+1}, 
+			{ x: x-1, y: y  }, 
+			{ x: x-1, y: y-1}, 
+			{ x: x  , y: y-1}, 
+			{ x: x+1, y: y-1}, 
+			{ x: x+1, y: y  }, 
+			{ x: x+1, y: y+1} 
+		];
+
+		// make next move
+		var splicedV = null;
+		var danglingV = null;
+		p = null;
+
+		var index = lastStep - 4;
+		if (index < 0) index = 8+index;
+
+		for (var n=0; n<8; n++, index = (index+1)%8) 
+		{
+			if (v[index] && testContour(II[index], contourMap)) 
+			{
+				var nextPixel = ii[index];
+				p = { x: nextPixel.x, y: nextPixel.y, v: splicedV };
+				lastStep = index;
+
+				break;
+			}
+		}
+
+
+		/*
+		if      (v[0] && testContour(Yp + X,  contourMap)) p = { x: x  , y: y+1, v: splicedV };
+		else if (v[1] && testContour(Yp + Xm, contourMap)) p = { x: x-1, y: y+1, v: splicedV };
+		else if (v[2] && testContour(Y  + Xm, contourMap)) p = { x: x-1, y: y  , v: splicedV };
+		else if (v[3] && testContour(Ym + Xm, contourMap)) p = { x: x-1, y: y-1, v: splicedV };
+		else if (v[4] && testContour(Ym + X,  contourMap)) p = { x: x  , y: y-1, v: splicedV };
+		else if (v[5] && testContour(Ym + Xp, contourMap)) p = { x: x+1, y: y-1, v: splicedV };
+		else if (v[6] && testContour(Y  + Xp, contourMap)) p = { x: x+1, y: y  , v: splicedV };
+		else if (v[7] && testContour(Yp + Xp, contourMap)) p = { x: x+1, y: y+1, v: splicedV };
+		else 
+		{
+			p = null;
+			console.log(" ********** Contour No more")
+		}
+		*/
+
+		if (p !== null)
+		{
+
+			// deal with any dangling edges
+			if (danglingV) 
+			{
+				curActiveList.push({
+					x: x, 
+					y: y,
+					vertices: danglingV
+				});
+			}
+		}
+		else
+		{
+			console.log(" ********** Contour No more")
+
+			// add contour to list of contours
+			if (curContour.length > 2) {
+				contours.push( curContour );
+			}
+			curContour = [];
+			lastV = null;
+		}
+
+		function testContour(I, contourMap) 
+		{
+			var vertices = contourMap[I];
+			if (vertices)
+			{
+				// test all vertices
+				var connected = false;
+				var dangling = [];
+
+				if (vertices.length == 2)
+				{
+					splicedV = [vertices[1]];
+					vertices.splice(0, 2);
+					return true;
+				}
+				else
+				{
+					console.log(" *** testContour: not sure what to do here!");
+					for (var i=0, len=vertices.length; i<len; i += 2) 
+					{
+						var v1 = vertices[i];
+						var v2 = vertices[i+1];
+
+						// test to see if we have a connection with the current contour
+						if (!connected && v1.x == lastV.x && v1.y == lastV.y)
+						{
+							vertices.splice(i, 2);
+							splicedV = [v2];
+							connected = true;
+						}
+						else if (!connected && v2.x == lastV.x && v2.y == lastV.y)
+						{
+							vertices.splice(i, 2);
+							splicedV = [v1];
+							connected = true;
+						}
+						else
+						{
+							dangling.push(v1); dangling.push(v2);
+						}
+					}
+
+					if (connected) 
+					{
+						danglingV = dangling.length > 0 ? dangling : null;
+						return true;
+					}
+					else 
+					{
+						return false;
+					}
+				}
+			}
+			else
+			{
+				return false;
+			}
+		}
+	}
+
+	if (curContour.length > 1) {
+		contours.push( curContour );
+	}
+
+	return contours;
 }
 
 function detectMaskEdge(mask, pBB)
@@ -982,6 +1374,7 @@ function detectMaskEdge(mask, pBB)
 	}
 
 	// draw contour
+	/*
 	if (svg) {
 		svg.selectAll("rect.contour").data(contourVertices).enter().append("rect")
 			.attr("x", function(d) { return d.x / resolution; })
@@ -990,6 +1383,7 @@ function detectMaskEdge(mask, pBB)
 			.attr("width", 1/resolution)
 			.attr("height", 1/resolution)
 	}
+	*/
 	console.log("Edge detect: v: " + contourVertices.length + ", lowestRight: " + lowestRight.x + ", " + lowestRight.y);
 	return { contourVertices: contourVertices, lowestRight: lowestRight };
 }
