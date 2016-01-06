@@ -82,10 +82,26 @@ BubbleSets.prototype.computeBubbleSet = function(set)
 
 BubbleSets.prototype.computeAll = function()
 {
+	this.contours = [];
 	for (var i=0, N=this.sets.length; i<N; i++) 
 	{
+		// compute bubble outline
 		this.computeBubbleSet(this.sets[i]);
-	}	
+
+		// extract contour
+		var contour = this.extractBubbleContour(this.sets[i]);
+		
+		// if has contour, draw it
+		if (contour) 
+		{
+			this.contours.push
+			({
+				set: i,
+				contours: contour.contour
+			});
+		}
+	}
+	return this.contours;
 }
 
 BubbleSets.prototype.getSet = function(index)
@@ -390,7 +406,7 @@ var SIN_THETA = Math.sin(45 * Math.PI / 180);
 BubbleSets.prototype.reRoute = function(set, edge, obstacle, collision)
 {
 	// amount to push out edge by
-	var PUSH_OUT = this.R0 * 1.7;
+	var PUSH_OUT = this.R0 * 1.9;
 
 	// start with a vector going from the center
 	// of the obstacle to the point that's perpendicular to the edge
@@ -732,54 +748,20 @@ BubbleSets.prototype.extractBubbleContour = function(set, step)
 	var contour = null;
 	if (bestSolution)
 	{
-		// see which points the contour will be engulfing 
-		// (we'll use this as a termination test)
-		var engulf = {
-			left:    Number.MAX_VALUE,
-			right:  -Number.MAX_VALUE,
-			top:     Number.MAX_VALUE,
-			bottom: -Number.MAX_VALUE 
-		};
-
-		for (var i=0, N=hitList.length; i<N; i++) 
-		{
-			var target = hitList[i];
-			if (target.hit)
-			{
-				// include this point in the test
-				var x = Math.floor(target.x * this.resolution);
-				var y = Math.floor(target.y * this.resolution);
-
-				engulf.left   = Math.min( engulf.left,   x);
-				engulf.right  = Math.max( engulf.right,  x);
-				engulf.top    = Math.min( engulf.top,    y);
-				engulf.bottom = Math.max( engulf.bottom, y);
-			}		
-		}
-
-		/*
-		// detect the edge of the mask
-		var contourData = detectMaskEdge(bestSolution, set.pBB);
-
-		console.log("flood fill complete. covered: " + bestHitCount + " / " + set.members.length + " at " + threshold);
-		console.log("lowestPoint: " + contourData.lowestRight.x + ", " + contourData.lowestRight.y + ", points in contour: " + contourData.contourVertices.length);
-		
-		contour = traceContour(
-			contourData.lowestRight,
-			contourData.contourVertices, 
-			set.pBB,
-			engulf
-		);
-		console.log("contour has: " + contour.length + " / " + contourData.pointCount );
-		*/
-
 		contour = this.marchingSquares(bestSolution, set.pBB, threshold);
 	}
 
-	return {
-		contour: contour,
-		hits: bestHitCount
-	};
+	if (contour)
+	{
+		return {
+			contour: contour,
+			hits: bestHitCount
+		};
+	}
+	else
+	{
+		return null
+	}
 }
 
 BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
@@ -854,16 +836,16 @@ BubbleSets.prototype.floodFill = function(set, eThreshold, hitList)
 			];
 
 
-			// next moves
+			// next moves (do only 4 neighbors)
 			var nI;
 			nI = Yp + X ; if (v[0] && mask[nI]==0) q.push({ x: x  , y: y+1, I: nI });
-			nI = Yp + Xm; if (v[1] && mask[nI]==0) q.push({ x: x-1, y: y+1, I: nI });
+			//nI = Yp + Xm; if (v[1] && mask[nI]==0) q.push({ x: x-1, y: y+1, I: nI });
 			nI = Y  + Xm; if (v[2] && mask[nI]==0) q.push({ x: x-1, y: y  , I: nI });
-			nI = Ym + Xm; if (v[3] && mask[nI]==0) q.push({ x: x-1, y: y-1, I: nI });
+			//nI = Ym + Xm; if (v[3] && mask[nI]==0) q.push({ x: x-1, y: y-1, I: nI });
 			nI = Ym + X ; if (v[4] && mask[nI]==0) q.push({ x: x  , y: y-1, I: nI });
-			nI = Ym + Xp; if (v[5] && mask[nI]==0) q.push({ x: x+1, y: y-1, I: nI });
+			//nI = Ym + Xp; if (v[5] && mask[nI]==0) q.push({ x: x+1, y: y-1, I: nI });
 			nI = Y  + Xp; if (v[6] && mask[nI]==0) q.push({ x: x+1, y: y  , I: nI });
-			nI = Yp + Xp; if (v[7] && mask[nI]==0) q.push({ x: x+1, y: y+1, I: nI });
+			//nI = Yp + Xp; if (v[7] && mask[nI]==0) q.push({ x: x+1, y: y+1, I: nI });
 		}
 	}
 	//console.log("Flood fill iterations: " + iterations);
@@ -936,7 +918,6 @@ BubbleSets.prototype.marchingSquares = function(mask, pBB, threshold)
 
 	// iso-contours
 	var contourMap = {};
-
 	var startP = null;
 
 	for (var y=0, yBound=maskH-1; y <= yBound; y++)
@@ -1036,8 +1017,15 @@ BubbleSets.prototype.marchingSquares = function(mask, pBB, threshold)
 	*/
 
 	// detect contour edges
-	var allContours = traceAllContours(startP, contourVertices, contourMap, pBB);
-	return allContours;
+	if (contourVertices.length > 0) 
+	{
+		var allContours = traceAllContours(startP, contourVertices, contourMap, pBB);
+		return allContours;
+	}
+	else
+	{
+		return null;
+	}
 
 }
 
@@ -1173,23 +1161,6 @@ function traceAllContours(startP, contourVertices, contourMap, pBB)
 			}
 		}
 
-
-		/*
-		if      (v[0] && testContour(Yp + X,  contourMap)) p = { x: x  , y: y+1, v: splicedV };
-		else if (v[1] && testContour(Yp + Xm, contourMap)) p = { x: x-1, y: y+1, v: splicedV };
-		else if (v[2] && testContour(Y  + Xm, contourMap)) p = { x: x-1, y: y  , v: splicedV };
-		else if (v[3] && testContour(Ym + Xm, contourMap)) p = { x: x-1, y: y-1, v: splicedV };
-		else if (v[4] && testContour(Ym + X,  contourMap)) p = { x: x  , y: y-1, v: splicedV };
-		else if (v[5] && testContour(Ym + Xp, contourMap)) p = { x: x+1, y: y-1, v: splicedV };
-		else if (v[6] && testContour(Y  + Xp, contourMap)) p = { x: x+1, y: y  , v: splicedV };
-		else if (v[7] && testContour(Yp + Xp, contourMap)) p = { x: x+1, y: y+1, v: splicedV };
-		else 
-		{
-			p = null;
-			console.log(" ********** Contour No more")
-		}
-		*/
-
 		if (p !== null)
 		{
 
@@ -1205,8 +1176,6 @@ function traceAllContours(startP, contourVertices, contourMap, pBB)
 		}
 		else
 		{
-			console.log(" ********** Contour No more")
-
 			// add contour to list of contours
 			if (curContour.length > 2) {
 				contours.push( curContour );
@@ -1239,7 +1208,7 @@ function traceAllContours(startP, contourVertices, contourMap, pBB)
 						var v2 = vertices[i+1];
 
 						// test to see if we have a connection with the current contour
-						if (!connected && v1.x == lastV.x && v1.y == lastV.y)
+						if (true || (!connected && v1.x == lastV.x && v1.y == lastV.y)) 
 						{
 							vertices.splice(i, 2);
 							splicedV = [v2];
@@ -1259,7 +1228,7 @@ function traceAllContours(startP, contourVertices, contourMap, pBB)
 
 					if (connected) 
 					{
-						danglingV = dangling.length > 0 ? dangling : null;
+						//danglingV = dangling.length > 0 ? dangling : null;
 						return true;
 					}
 					else 

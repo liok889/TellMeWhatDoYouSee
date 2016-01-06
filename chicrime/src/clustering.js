@@ -249,7 +249,7 @@ Clustering.prototype.makeClusteredSimMatrix = function()
 Clustering.prototype.kMedoids = function(_K)
 {
 	var distanceMatrix = this.distanceMatrix;
-	var K = Math.min(_K || DEFAUKT_K, distanceMatrix.length);
+	var K = Math.min(_K || DEFAULT_K, distanceMatrix.length);
 	var startTime = new Date();
 
 	// initial cluster list and unassigned members

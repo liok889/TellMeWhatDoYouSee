@@ -6,7 +6,7 @@
 
 // constants
 var MDS_POINT_RADIUS = 3.5;
-var MDS_PADDING = 10;
+var MDS_PADDING = 20;
 
 /* =======================
  * MDSPoint
@@ -276,6 +276,57 @@ MDS.prototype.drawConvexHull = function(clusters)
 		})
 		.on("mouseout", function(d) {
 			d3.select(this).style("fill-opacity", "0.1");
+		});
+}
+
+MDS.prototype.drawBubbleSets = function(clusters)
+{
+	this.svg.selectAll("g.mdsBubbleSets").remove();
+	var group = this.svg.append("g")
+		.attr("class", "mdsBubbleSets");
+
+	// create positions
+	var positions = []; 
+	var mdsPoints = this.mdsPoints;
+	for (var i=0, N=mdsPoints.length; i<N; i++) 
+	{
+		var p = mdsPoints[i].getPixelCoordinate();
+		positions.push({
+			x: p[0],
+			y: p[1]
+		});
+	}
+
+	// create sets
+	var sets = [];
+	for (var i=0, K=clusters.length; i<K; i++)
+	{
+		sets.push(clusters[i]);
+	}
+
+	var resolution = .3;
+	var bubbles = new BubbleSets(sets, positions, this.w, this.h, resolution, [3, 12]);
+	var setContours = bubbles.computeAll();
+
+	var pathGenerator = d3.svg.line()
+		.x(function(d) { return d.x; })
+		.y(function(d) { return d.y; })
+		.interpolate("cardinal-closed");
+
+	var colorSets = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd','#ccebc5','#ffed6f'];
+
+	group.selectAll("path").data(setContours).enter().append("path")
+		.attr("d", function(d) { return pathGenerator(d.contours[0]); })
+		.style("stroke", function(d, i) { return colorSets[i]; })
+		.style("fill", function(d, i) { return colorSets[i]; })
+		.style("stroke-width", (2*resolution) + "px")
+		.style("fill-opacity", "0.1")
+		.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) +")")
+		.on("mouseover", function(d) {
+			d3.select(this).style("fill-opacity", "")
+		})
+		.on("mouseout", function(d) {
+			d3.select(this).style("fill-opacity", "0.3");
 		});
 }
 
