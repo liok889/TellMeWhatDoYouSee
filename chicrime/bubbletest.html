@@ -56,7 +56,7 @@
 		var padding = 80;		// 30 pixels of padding for points
 		var N = 40;				// number of points to generate
 		var setSize = [35, 40];	// min/max size of set
-		var resolution = .15;	// resolution of bubble set's energy field (relative to size of canvas)
+		var resolution = .25;	// resolution of bubble set's energy field (relative to size of canvas)
 
 		var svg = d3.select("#bubbleSVG");
 		var canvas = d3.select("#bubbleCanvas");
@@ -184,7 +184,7 @@
 				.style("stroke-width", "0.5px")
 				.style("stroke", "#80d5ff")
 				.style("fill", "#80d5ff")
-				.style("fill-opacity", "0.6");
+				.style("fill-opacity", "0.3");
 			
 		}
 

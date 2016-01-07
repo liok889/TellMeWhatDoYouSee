@@ -97,10 +97,19 @@ BubbleSets.prototype.computeAll = function()
 			this.contours.push
 			({
 				set: i,
+				members: getMemberList(this.sets[i]),
 				contours: contour.contour
 			});
 		}
 	}
+
+	function getMemberList(arr) {
+		var members = [];
+		for (var i=0, N=arr.length; i<N; i++)
+			members.push(arr[i].m);
+		return members;
+	}
+
 	return this.contours;
 }
 

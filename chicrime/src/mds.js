@@ -279,6 +279,11 @@ MDS.prototype.drawConvexHull = function(clusters)
 		});
 }
 
+MDS.prototype.clearBubbleSets = function()
+{
+	this.svg.selectAll("g.mdsBubbleSets").remove();	
+}
+
 MDS.prototype.drawBubbleSets = function(clusters)
 {
 	this.svg.selectAll("g.mdsBubbleSets").remove();
@@ -308,26 +313,43 @@ MDS.prototype.drawBubbleSets = function(clusters)
 	var bubbles = new BubbleSets(sets, positions, this.w, this.h, resolution, [3, 12]);
 	var setContours = bubbles.computeAll();
 
+	// add color to contours
+	for (var i=0, K=setContours.length; i<K; i++) {
+		setContours[i].color = clusters[ setContours[i].set ].color;
+	}
+
 	var pathGenerator = d3.svg.line()
 		.x(function(d) { return d.x; })
 		.y(function(d) { return d.y; })
 		.interpolate("cardinal-closed");
 
-	var colorSets = ['#8dd3c7','#ffffb3','#bebada','#fb8072','#80b1d3','#fdb462','#b3de69','#fccde5','#d9d9d9','#bc80bd','#ccebc5','#ffed6f'];
+	(function(mds, g) {
+		g.selectAll("path").data(setContours).enter().append("path")
+			.attr("d", function(d) { return pathGenerator(d.contours[0]); })
+			.style("stroke", function(d, i) { return d.color; })
+			.style("fill", function(d, i) { return d.color; })
+			.style("stroke-width", (2*resolution) + "px")
+			.style("fill-opacity", "0.1")
+			.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) +")")
+			.on("mouseover", function(d) 
+			{
+				d3.select(this).style("fill-opacity", "");
+				if (mds.bubbleBrushCallback) {
+					mds.bubbleBrushCallback(d.members);
+				}
+			})
+			.on("mouseout", function(d) {
+				d3.select(this).style("fill-opacity", "0.3");
+				if (mds.bubbleBrushCallback) {
+					mds.bubbleBrushCallback([]);
+				}
+			});
+	})(this, group);
+}
 
-	group.selectAll("path").data(setContours).enter().append("path")
-		.attr("d", function(d) { return pathGenerator(d.contours[0]); })
-		.style("stroke", function(d, i) { return colorSets[i]; })
-		.style("fill", function(d, i) { return colorSets[i]; })
-		.style("stroke-width", (2*resolution) + "px")
-		.style("fill-opacity", "0.1")
-		.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) +")")
-		.on("mouseover", function(d) {
-			d3.select(this).style("fill-opacity", "")
-		})
-		.on("mouseout", function(d) {
-			d3.select(this).style("fill-opacity", "0.3");
-		});
+MDS.prototype.setBubbleBrushCallback = function(callback)
+{
+	this.bubbleBrushCallback = callback;
 }
 
 MDS.prototype.setVisibility = function(visible)

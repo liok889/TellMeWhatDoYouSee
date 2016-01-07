@@ -113,14 +113,19 @@
 			stroke-width: 0.5px;	
 		}
 		#svgMDS {
-			background-color: #d8d8d8;
+			background-color: #e4e4e4;
+			/*background-color: #3f3f3f;*/
+
 		}
 
 		.brush .extent {
-			stroke: #fff;
-			fill-opacity: .125;
-			shape-rendering: crispEdges;
+			stroke: black;
+			fill: none;
+			fill-opacity: 0.05;
+			/*shape-rendering: crispEdges;*/
+			stroke-width: 0.5px;
 		}
+
 
 		.svgButton:hover {
 			fill: red;
@@ -128,14 +133,15 @@
 
 		/* signal box background rectangle */
 		.signalBox {
-			fill: #3f3f3f;
+			fill: #e4e4e4; 
+			/* #3f3f3f; */
 			stroke: #cccccc;
 			stroke-width: 1px;
 			/*stroke-dasharray: 2,2*/			
 		}
 
 		.signalBoxDrop {
-			fill: #565656;
+			fill: #cccccc;
 			stroke: #cccccc;
 			stroke-width: 1px;
 			stroke-dasharray: 2,2			
@@ -147,39 +153,46 @@
 		}
 
 		.xAxis path {
-			stroke-width: 1px;
-			stroke: white;
+			stroke: black;
+			stroke-width: 0.5px;
 			fill: none;
 		}
 		
 		.xAxis line {
-			stroke-width: 1px;
-			stroke: white;
+			stroke: black;
+			stroke-width: 0.5px;
 			fill: none;
 		}
 
 		.xAxis text {
 			font-family: sans-serif;
 			font-size: 11px;
-			fill: white;
+			fill: black;
 		}
 
 		.yAxis path {
-			stroke-width: 1px;
-			stroke: white;
+			stroke: black;
+			stroke-width: 0.5px;
 			fill: none;
 		}
 
 		.yAxis line {
-			stroke-width: 1px;
-			stroke: white;
+			stroke: black;
+			stroke-width: 0.5px;
 			fill: none;
 		}
 
 		.yAxis text {
 			font-family: sans-serif;
 			font-size: 10px;
-			fill: white;
+			fill: black;
+		}
+
+		.brushCurve {
+			stroke: black;
+			stroke-width: 1.5px;
+			stroke-dasharray: 2,2;
+			fill: none;	
 		}
 	</style>
 
@@ -189,7 +202,7 @@
 	<div id='map' style="border: solid 1px black"></div>
 	
 	<!-- user interface -->
-	<div id='uiPane' style="position: absolute; top: 20px; left: 1385px; background: #eee; width: 150px; height: 190px; border: solid 1px #cccccc; padding: 5px 10px">
+	<div id='uiPane' style="position: absolute; top: 20px; left: 1385px; background: #f3f3f3; width: 150px; height: 210px; border: solid 1px #cccccc; padding: 5px 10px">
 		<form>
 			<div class="sectionLabel">Map</div>
 			<input id="checkShowCommunities" type="checkbox" value="1" checked></input>show communities<br>
@@ -198,12 +211,16 @@
 			<div id="sliderMapOpacity" style="margin-top: 5px; width: 120px; height: 10px"></div>
 
 			<br>
-			<div class="sectionLabel">Partition grid</div>
-			<input id="checkShowGrid" type="checkbox" value="1" ></input>show grid<br>
+			<div class="sectionLabel">Heatmap</div>
+			<!--<input id="checkShowGrid" type="checkbox" value="1" ></input>show grid<br>-->
 			<input id="checkShowHeatmap" type="checkbox" value="1" checked></input>show heatmap<br>
 			
-			grid resolution
+			heatmap resolution
 			<div id="sliderGridResolution" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
+
+			<span id="labelClusterCount">clusters</span>
+			<div id="sliderClusterCount" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
+
 			<!--
 			grid overlap
 			<div id="sliderGridOverlap" style="margin-top: 5px; width: 100px; height: 10px"></div>
@@ -211,7 +228,7 @@
 		</form>
 	</div>
 
-	<div id="featurePane" style="position: absolute; top: 230px; left: 1385px; background: #f3f3f3; width: 150px; height: 200px; border: solid 1px #cccccc; padding: 5px 10px">
+	<div id="featurePane" style="position: absolute; top: 250px; left: 1385px; background: #f3f3f3; width: 150px; height: 200px; border: solid 1px #cccccc; padding: 5px 10px">
 		<div class="sectionLabel">Signal</div>
 		
 		<span id="labelYearlyRange">data range</span>
@@ -242,7 +259,11 @@
 	<!-- MDS pane -->
 	<svg id="svgMDS" width="590" height="320" style="position: absolute; top: 520px; left: 580px; border: solid 1px #cccccc; z-index: 2"></svg>
 	<img id="imgAddSelection" src="assets/plus.svg" width="20" height="20" style="visibility: hidden; position: absolute; top: 490px; left: 585px; z-index: 3"></img>
-	<img id="imgShowSmallMultipatterns" src="assets/grid.svg" width="20" height="20" style="visibility: visible; position: absolute; top: 490px; left: 1120px; z-index: 3"></img>
+
+	<img id="imgShowSmallMultipatterns" src="assets/grid.svg" width="20" height="20" style="visibility: visible; position: absolute; top: 490px; left: 1090px; z-index: 3"></img>
+
+	<img id="imgShowClusters" src="assets/cluster.svg" width="20" height="20" style="visibility: visible; position: absolute; top: 490px; left: 1120px; z-index: 3"></img>
+
 	<img id="imgShowMDS" src="assets/scatterplot.svg" width="20" height="20" style="visibility: visible; position: absolute; top: 490px; left: 1150px; z-index: 3"></img>
 
 	<!-- similarity matrix and dendogram pane -->
@@ -269,9 +290,10 @@
 		var SHOW_CITY = true;
 		var MAP_OPACITY = 1.0;
 		var YEAR_RANGE = [2002, 2014];
+		var K_CLUSTER_COUNT = 6;
 
 		// brush color
-		var BRUSH_COLOR = "#cc0000"
+		var BRUSH_COLOR = '#ffff66'; //"#cc0000"
 
 		// analysis interface (which will connect to a nodejs back-end to run analyses on the database)
 		var gridAnalysis = null;
@@ -290,11 +312,12 @@
 				SHOW_CITY = this.checked;
 			}).node().checked = SHOW_CITY;
 
-
+			/*
 			d3.select("#checkShowGrid").on("click", function() {
 				d3.select("#gridGroup").attr("visibility", this.checked ? "visible" : "hidden");
 				SHOW_GRID = this.checked;
 			}).node().checked = SHOW_GRID;
+			*/
 
 			d3.select("#checkShowHeatmap").on("click", function() {
 				d3.select("#heatmap").attr("visibility", this.checked ? "visible" : "hidden");
@@ -324,6 +347,18 @@
 					projectGrid();
 				}
 			});
+
+			$("#sliderClusterCount").slider({
+				range: false,
+				min: 2, max: 10,
+				value: K_CLUSTER_COUNT,
+				step: 1,
+				change: function( event, ui ) {
+					K_CLUSTER_COUNT = ui.value;
+					$("#labelClusterCount").html("clusters: " + K_CLUSTER_COUNT);
+				}
+			});
+			$("#labelClusterCount").html("clusters: " + K_CLUSTER_COUNT);
 
 			/*
 			$("#sliderGridOverlap").slider({

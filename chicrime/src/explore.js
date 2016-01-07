@@ -482,10 +482,7 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 			.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
 			.attr("class", "brushSignalGroup");
 		g.append("path")
-			.style("stroke-dasharray", "2,2")
-			.attr("stroke", "white")
-			.attr("stroke-width", "1.5px")
-			.attr("fill", "none")
+			.attr("class", "brushCurve")
 			.attr("d", "");
 	}
 	

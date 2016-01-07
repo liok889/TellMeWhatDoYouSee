@@ -62,6 +62,12 @@ function GridAnalysis(theMap, svgExplore)
 		MDSGroup,
 		w, h
 	);
+	(function(thisGrid) {
+		thisGrid.mds.setBubbleBrushCallback(function(members) 
+		{
+			thisGrid.brushSelectionMembers(members);
+		})
+	})(this);
 
 	// link MDS with selector
 	this.mds.setColorMap( this.selector.getColorMap() );
@@ -88,6 +94,13 @@ function GridAnalysis(theMap, svgExplore)
 				}
 			},
 			
+			{
+				id: "imgShowClusters", 
+				callback: function() {
+					thisGrid.kMedoids();
+				}
+			},
+
 			{
 				id: "imgShowSmallMultipatterns", 
 				callback: function() {
@@ -340,6 +353,28 @@ GridAnalysis.prototype.data_ready = function()
 	this.switchMDSPanel();
 }
 
+GridAnalysis.prototype.kMedoids = function()
+{
+	// calculate K mediuds
+	this.kClusters = this.clustering.kMedoids(K_CLUSTER_COUNT);
+
+	// clear all previous selections
+	this.selector.clearAll();
+
+	// assign colors to clusters, and make new selections from them
+	var colorSets = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999'];
+	for (var i=0, K=this.kClusters.length; i<K; i++) 
+	{
+		this.kClusters[i].color = colorSets[ Math.min(i, colorSets.length-1) ];
+		this.makeBrushSelection( this.kClusters[i].members, /*this.kClusters[i].color*/ null );
+	}
+
+	this.mds.clearBubbleSets();
+
+	// visualize the results as bubble groups
+	//this.mds.drawBubbleSets(this.kClusters);
+}
+
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
 	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
@@ -538,7 +573,7 @@ GridAnalysis.prototype.makeClusterSelection = function(cluster)
 	this.selector.newSelection(members);
 }
 
-GridAnalysis.prototype.makeBrushSelection = function(ids)
+GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 {
 	if (ids.length > 0)
 	{
@@ -555,7 +590,7 @@ GridAnalysis.prototype.makeBrushSelection = function(ids)
 				geoRect: geoRect
 			});
 		}
-		this.selector.newSelection(members);
+		this.selector.newSelection(members, ownColor);
 	}
 }
 
@@ -766,7 +801,6 @@ GridAnalysis.prototype.brushCells = function(cells)
 
 	// brush MDS plot
 	this.mds.brushPoints(brushedIDs);
-
 }
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
