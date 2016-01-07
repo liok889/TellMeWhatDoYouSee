@@ -45,15 +45,12 @@ Selection.prototype.updateMemberList = function(newMembers)
 	if (!this.pathG) {
 		this.pathG = this.content.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
 		this.pathG.append("path")
-			.attr("class", "timeseriesSelection")
-			.attr("d", pathGenerator(this.avgTimeseries.getSeries()))
-			.attr("stroke", "black")
-			.attr("stroke-width", "1px")
-			.attr("fill", "none");
+			.attr("class", "selectionCurve")
+			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 	else
 	{
-		this.pathG.selectAll("path.timeseriesSelection").transition()
+		this.pathG.selectAll("path.selectionCurve").transition()
 			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 };
@@ -72,6 +69,7 @@ Selection.prototype.populateSelection = function(g)
 		.attr("width", ClusterSelector.RECT_W)
 		.attr("height", ClusterSelector.RECT_H)
 		.attr("fill", this.color || ClusterSelector.LAST_COLOR)
+		.attr("fill-opacity", "0.6")
 		.attr("rx", 3.5)
 		.attr("ry", 3.5)
 		.attr("stroke", "");
@@ -409,7 +407,7 @@ ClusterSelector.prototype.newSelection = function(members, ownColor)
 ClusterSelector.prototype.clearAll = function() 
 {
 	this.selections = [];
-	this.svg.selectAll("g").remove();
+	this.svg.selectAll("g").transition().remove();
 
 	// restore default selection colors
 	ClusterSelector.SELECTION_COLORS = [];

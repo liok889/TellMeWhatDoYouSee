@@ -97,7 +97,7 @@ BubbleSets.prototype.computeAll = function()
 			this.contours.push
 			({
 				set: i,
-				members: getMemberList(this.sets[i]),
+				members: getMemberList(this.sets[i].members),
 				contours: contour.contour
 			});
 		}
@@ -105,8 +105,9 @@ BubbleSets.prototype.computeAll = function()
 
 	function getMemberList(arr) {
 		var members = [];
-		for (var i=0, N=arr.length; i<N; i++)
+		for (var i=0, N=arr.length; i<N; i++) {
 			members.push(arr[i].m);
+		}
 		return members;
 	}
 

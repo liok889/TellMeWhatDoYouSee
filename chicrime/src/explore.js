@@ -104,7 +104,7 @@ function generateSignalPath(group, timeseries, color)
 	);
 
 
-	// make a pth 
+	// make a path 
 	var pathG = group.append("g").attr("transform", "translate(" + SIGNAL_PAD + "," + SIGNAL_PAD + ")");
 	var path = pathG.append("path")
 		.attr("class", "timeseriesPlot")
@@ -607,7 +607,7 @@ SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 			.attr("y1", (options.SIGNAL_H-2*options.SIGNAL_PAD) / 2 + options.SIGNAL_PAD)
 			.attr("x2", options.SIGNAL_W-options.SIGNAL_PAD)
 			.attr("y2", (options.SIGNAL_H-2*options.SIGNAL_PAD) / 2 + options.SIGNAL_PAD)
-			.attr("stroke", "#cccccc")
+			.attr("stroke", "#444444")
 			.attr("stroke-width", "0.5px");
 
 	}
@@ -725,7 +725,7 @@ SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 	var update = g.selectAll("path").data(paths);
 	
 	var enter = update.enter().append("path")
-		.attr("stroke", "white")
+		.attr("stroke", "none")
 		.attr("stroke-width", "1.5px")
 		.attr("d", function(path) { return path.d; })
 		.attr("fill", function(path) { return path.direction ? COLOR_OVER : COLOR_UNDER; });

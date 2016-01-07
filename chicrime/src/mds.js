@@ -5,8 +5,10 @@
  */
 
 // constants
-var MDS_POINT_RADIUS = 3.5;
-var MDS_PADDING = 20;
+var MDS_POINT_RADIUS 			= 3.5;
+var MDS_PADDING 				= 20;
+var MDS_DOUBLE_BRUSH_OPACITY	= 0.2;
+var BUBBLE_OPACITY				= 0.15;
 
 /* =======================
  * MDSPoint
@@ -329,7 +331,7 @@ MDS.prototype.drawBubbleSets = function(clusters)
 			.style("stroke", function(d, i) { return d.color; })
 			.style("fill", function(d, i) { return d.color; })
 			.style("stroke-width", (2*resolution) + "px")
-			.style("fill-opacity", "0.1")
+			.style("fill-opacity", BUBBLE_OPACITY)
 			.attr("transform", "scale(" + (1/resolution) + "," + (1/resolution) +")")
 			.on("mouseover", function(d) 
 			{
@@ -339,7 +341,7 @@ MDS.prototype.drawBubbleSets = function(clusters)
 				}
 			})
 			.on("mouseout", function(d) {
-				d3.select(this).style("fill-opacity", "0.3");
+				d3.select(this).style("fill-opacity", BUBBLE_OPACITY);
 				if (mds.bubbleBrushCallback) {
 					mds.bubbleBrushCallback([]);
 				}
@@ -470,7 +472,7 @@ MDS.prototype.brushPoints = function(ids)
 	{
 		// if existing brushed selection, dim down the opacity of those
 		if (this.brushedSelection) {
-			this.brushedSelection.style("fill-opacity", "0.15").style("stroke", "none");
+			this.brushedSelection.style("fill-opacity", MDS_DOUBLE_BRUSH_OPACITY).style("stroke", "none");
 		}
 
 		// unpack list of of IDs to brush

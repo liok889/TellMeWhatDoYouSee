@@ -194,6 +194,12 @@
 			stroke-dasharray: 2,2;
 			fill: none;	
 		}
+
+		.selectionCurve {
+			stroke: black;
+			stroke-width: 1px;
+			fill: none;
+		}
 	</style>
 
 </head>
@@ -350,7 +356,7 @@
 
 			$("#sliderClusterCount").slider({
 				range: false,
-				min: 2, max: 10,
+				min: 2, max: 15,
 				value: K_CLUSTER_COUNT,
 				step: 1,
 				change: function( event, ui ) {
