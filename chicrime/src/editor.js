@@ -5,6 +5,7 @@
  */
 
 // edit modes
+var MAX_EDIT_RANGE	= 80;
 var EDIT_ONE		= 1;
 var EDIT_WEEKDAY	= 2;
 var EDIT_ALL		= 3;
@@ -20,7 +21,7 @@ function SignalEditor(group, w, h, timeseries, aggregation)
 	this.aggregation = aggregation;
 	this.selectionRange = 5;
 	this.selections = [];
-	this.mode = EDIT_ALL;
+	this.mode = EDIT_ONE;
 	this.editorID = EDITOR_ID++;
 
 	switch (aggregation)
@@ -67,8 +68,18 @@ function SignalEditor(group, w, h, timeseries, aggregation)
 			})
 			.on("mouseout", function()
 			{
-				thisEditor.mouseout();
-				thisEditor.mouseOver = false;
+				if (thisEditor.drag) {
+					d3.select(window).on("mouseup.mouseoutRelease", function() {
+						thisEditor.mouseout();
+						thisEditor.mouseOver = false;					
+						d3.select(window).on("mouseup.mouseoutRelease", null);
+					});
+				}
+				else
+				{
+					thisEditor.mouseout();
+					thisEditor.mouseOver = false;
+				}
 			})
 			.on("mousedown", function() 
 			{
@@ -98,10 +109,10 @@ function SignalEditor(group, w, h, timeseries, aggregation)
 			if (thisEditor.mouseOver) 
 			{
 
-				if (d3.event.deltaY > 0 && thisEditor.selectionRange < 60) {
+				if (d3.event.deltaY > 0 && thisEditor.selectionRange < MAX_EDIT_RANGE) {
 					thisEditor.selectionRange++;
 				}
-				else if (d3.event.deltaY < 0 && thisEditor.selectionRange > 1) {
+				else if (d3.event.deltaY < 0 && thisEditor.selectionRange > 0) {
 					thisEditor.selectionRange--;
 				}
 				thisEditor.mousemove( d3.mouse(thisEditor.bgRect.node()) );
@@ -257,16 +268,3 @@ SignalEditor.prototype.mouseout = function(mouse)
 	this.group.selectAll("rect.editSelection").remove();
 	this.selections = [];
 }
-
-SignalEditor.prototype.mouseDrag = function(mouse)
-{
-}
-
-SignalEditor.prototype.incrementSelectionSize = function(direction)
-{
-	this.selectionSize += direction;
-	if (this.lastMouse) {
-		this.mousemove(this.lastMouse);
-	}
-}
-
