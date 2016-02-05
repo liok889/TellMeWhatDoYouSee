@@ -122,14 +122,9 @@ function SignalEditor(group, w, h, timeseries, aggregation)
 	})(this)
 }
 
-SignalEditor.prototype.getSelections = function()
+SignalEditor.prototype.getEditedSeries = function()
 {
-	return this.selections;
-}
-
-SignalEditor.prototype.setVisibility = function(v)
-{
-	this.group.attr('visibility', v ? 'visible' : 'hidden');
+	return this.timeseries;
 }
 
 SignalEditor.prototype.plotSignal = function(timeseries)
@@ -184,6 +179,12 @@ SignalEditor.prototype.mousedrag = function(mouse)
 		SIGNAL_PAD
 	);
 	this.signalPath.attr("d", pathGenerator(series));
+
+	// trigger an edit event
+	this.timeseries.invalidate();
+
+	// loop through all timesteps in the system
+	gridAnalysis.showDistanceToExample(this.timeseries);
 }
 
 SignalEditor.prototype.mousemove = function(mouse) 

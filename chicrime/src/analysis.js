@@ -375,6 +375,16 @@ GridAnalysis.prototype.kMedoids = function()
 	//this.mds.drawBubbleSets(this.kClusters);
 }
 
+GridAnalysis.prototype.lookupCell = function(tsIndex)
+{
+	return this.index2ij[tsIndex];
+}
+
+GridAnalysis.prototype.getTimeseriesCount = function()
+{
+	return this.analysisResults.tsIndex.length;
+}
+
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
 	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
@@ -635,6 +645,67 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 	}
 }
 
+// given an example (edited) time series, plot similarity to it
+GridAnalysis.prototype.showDistanceToExample = function(example)
+{
+	if (!example) {
+		// no example provided, return display to normal
+		(function(heatmapSelection, colorScale, logScale) 
+		{
+			heatmapSelection.style("fill", function(d) { return colorScale(logScale(d.nValue+1)); });
+		})(this.heatmapSelection, this.colorScale, this.logScale);
+	}
+	else
+	{
+		// calculate the distance of this example to all time series in our dataset
+		var N = this.getTimeseriesCount();
+		var distanceList = [];
+		for (var i=0; i<N; i++) 
+		{
+			var ts = this.getTimeseries(i);
+			var distance = ts.distance(example);
+			distanceList.push( distance );
+		}
+
+		// plot distance heatmap
+		this.showDistanceHeatmap( distanceList );
+	}
+}
+
+GridAnalysis.prototype.showDistanceHeatmap = function(distanceList)
+{
+	// figure out min/max in distance list
+	var minD = Number.MAX_VALUE, maxD = -Number.MAX_VALUE;
+	for (var i=0, N=distanceList.length; i<N; i++) {
+		var d=distanceList[i];
+		if (d < minD) {
+			minD = distanceList[i];
+		}
+		if (d > maxD) {
+			maxD = distanceList[i];
+		}
+	}
+	console.log("\tDistance profile: " + minD + ", " + maxD);
+
+
+	// make color scale
+	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
+	var DISTANCE_COLOR = ['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#1d91c0','#225ea8','#0c2c84'].reverse();
+
+	var _logScale = d3.scale.log().domain([1, maxD+1]).range([0, 1]);
+	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);
+	
+	(function(ij2index, heatmapSelection, colorScale, logScale, distances) 
+	{
+
+		heatmapSelection.style("fill", function(d) 
+		{
+			var index = ij2index[ d.cell[0] ][ d.cell[1] ];
+			return colorScale( (distances[index] + 0) );
+		})
+	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
+}
+
 GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
 {
 	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
@@ -705,9 +776,13 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	this.geoRectMap = geoRectMap;
 	this.geoRects = geoRects;
 
-	// produce color for the heatmap
+	// make color scales
 	var _logScale = d3.scale.log().domain([minValue+1, maxValue+1]).range([0, 1]);
-	var _colorScale = d3.scale.quantize([0, 1]).range(HEATMAP_COLOR);
+	var _colorScale = d3.scale.quantize().domain([0, 1]).range(HEATMAP_COLOR);
+	
+	// store color scales
+	this.logScale = _logScale;
+	this.colorScale = _colorScale;
 
 	svg.selectAll("g.heatmap").remove();
 	
@@ -716,7 +791,8 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup, grid) 
 	{
-		var selection = heatmapGroup.selectAll("path").data(grid.geoRects).enter().append("path")
+		var selection = heatmapGroup.selectAll("path").data(grid.geoRects);
+		selection.enter().append("path")
 			.attr("id", function(d) {
 				var cell = d.getCell();
 				return "heatmap_cell_" + cell[0] + "_" + cell[1]; 

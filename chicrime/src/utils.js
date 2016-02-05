@@ -74,3 +74,7 @@ function enableScroll() {
     window.ontouchmove = null;  
     document.onkeydown = null;  
 }
+
+function isInteger(x) {
+  return x % 1 === 0;
+}

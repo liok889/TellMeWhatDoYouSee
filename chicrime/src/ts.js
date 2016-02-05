@@ -124,6 +124,10 @@ Timeseries.prototype.normalize = function()
 	}
 	this.prevMax = seriesMax;
 	this.seriesMax = 1.0;
+	
+	// invalidate bag of strings after normalization
+	this.bagOfStrings = undefined;
+
 	return this;
 }
 
@@ -142,5 +146,146 @@ Timeseries.prototype.getPathGenerator = function(width, height, pad, constX, con
 		constX,
 		constY
 	);
-
 }
+
+Timeseries.prototype.invalidate = function()
+{
+	this.bagOfStrings = undefined;
+}
+
+// calculates distance between two timeseries (this and anotherSeries)
+Timeseries.prototype.distance = function(anotherSeries)
+{
+	// compute bag of strings for both timeseries
+	if (!this.bagOfStrings) {
+		this.bagOfStrings = getBagOfStrings(this.series);
+	}
+	if (!anotherSeries.bagOfStrings) {
+		anotherSeries.bagOfStrings = getBagOfStrings(anotherSeries.series);
+	}
+
+	// compare distance
+	var _distance = 0;
+	return (function(distance, bag1, bag2) 
+	{
+		// count commons
+		var commons = d3.map();
+		bag1.forEach(function(str, freq1) {
+
+			var freq2 = bag2.get(str); 
+			if (isNaN(freq2)) { 
+				freq2 = 0; 
+			} else 
+			{
+				// add to commons
+				commons.set(str, true);
+			}
+
+			distance += Math.pow(freq1-freq2, 2);
+		});
+
+		// count occurences in bag2
+		bag2.forEach( function(str, freq) {
+			if (!commons.get(str)) {
+				distance += Math.pow(freq, 2);
+			}
+		});
+		return distance;
+
+	})(_distance, this.bagOfStrings, anotherSeries.bagOfStrings);
+}
+
+var ALPHABET_SIZE 	= 5;
+var WORD_SIZE 		= 8;
+var WINDOW_SIZE 	= 40;
+var BREAK_POINTS = 	[ -0.84, -0.25, 0.25, 0.84 ];
+
+function getBagOfStrings(data) 
+{
+	// moving window
+	var windowSize = WINDOW_SIZE;
+	var windowCount = data.length - windowSize + 1;
+	if (windowSize > data.length) 
+	{
+ 		windowSize = data.length;
+ 		windowCount = 1;
+	}
+
+	var stepSize = windowSize / WORD_SIZE;
+	if (!isInteger(stepSize)) 
+	{
+		stepSize = Math.ceil(stepSize);
+	}
+
+	// running mean, keep track of it
+	var m = 0;
+	for (var i = 0; i < windowSize; i++) {
+		m += data[i];
+	}
+
+	// bag of strings
+	var lastString = null;
+	var localBag = d3.map();
+
+	// moving window over the time series
+	for (var w = 0; w < windowCount; w++) 
+	{
+		// calculate standard deviation
+		var index = w, mean = m / windowSize, delta = 0;
+		for (var i=0; i < windowSize; i++, index++) 
+		{
+			var diff = data[index] - mean;
+			delta += diff*diff;
+		}
+		var std = Math.sqrt( delta / windowSize );
+
+		// z-normalize time series;
+		var nData = [];
+		index = w;
+		for (var i=0; i < windowSize; i++, index++) {
+			nData.push( (data[index] - mean) / std );
+		}
+
+		// update the running mean
+		if (w < windowCount-1) {
+			m = m - data[w] + data[index];
+		}
+
+		// this will hold the resulting string for the current window
+		var str = "";
+
+		// work on the normalized data
+		for (var j=0, len = nData.length; j < len; j+=stepSize) 
+		{
+			var avg = 0, k = 0, c = 0;
+			for (; (k < stepSize) && (j+k < len); k++) {
+				avg += nData[j+k];
+			}
+			avg /= k;
+
+			// look up the character
+			for (c=0; c < BREAK_POINTS.length; c++) {
+				if (avg < BREAK_POINTS[c]) {
+					break;
+				}
+			}
+
+			// transcribe to a letter starting from 'a'
+			str += (String.fromCharCode(97 + c));	// 97 is the ASCII/Unicode for 'a'
+		}
+
+		// add string to bag
+		if (!(str === lastString)) 
+		{
+			var b = localBag.get(str);
+			if (b) {
+				b++;
+			} else { b = 1; }
+			localBag.set(str, b);
+			lastString = str;
+		}
+	}
+
+	return localBag;
+}
+

@@ -229,8 +229,16 @@ SignalVis.prototype.init = function()
 				})
 				.on("click", function() 
 				{
-					thisSignalVis.mode = (thisSignalVis.mode + 1) % 4;
-					thisSignalVis.updateMode();
+					// store old mode
+					var oldMode = thisSignalVis.mode;
+
+					// move to new mode
+					thisSignalVis.mode++;
+					if (thisSignalVis.mode == SIGNAL_AVG) thisSignalVis.mode++;
+					thisSignalVis.mode = thisSignalVis.mode % 4;
+
+					// update display and yAxis
+					thisSignalVis.updateMode(oldMode);
 					thisSignalVis.updateYAxis();
 				});
 		})(this, this.options);
@@ -247,7 +255,7 @@ SignalVis.prototype.init = function()
 	this.updateSignals();
 }
 
-SignalVis.prototype.updateMode = function() 
+SignalVis.prototype.updateMode = function(oldMode) 
 {
 	var visVector = null;
 	switch (this.mode)
@@ -266,8 +274,12 @@ SignalVis.prototype.updateMode = function()
 	
 	case SIGNAL_EDIT:
 		visVector = [false, false, false, true];
-		this.editSignal();
+		this.activateEditor(true);
 		break;
+	}
+
+	if (oldMode == SIGNAL_EDIT) {
+		this.activateEditor(false);
 	}
 
 	this.group.selectAll("g.individualSignalGroup")
@@ -359,23 +371,38 @@ SignalVis.prototype.updateOneSignal = function(selection)
 	}
 }
 
-SignalVis.prototype.editSignal = function()
+SignalVis.prototype.activateEditor = function(activate)
 {
-	var editGroup = this.group.selectAll("g.editSignalGroup");
-	if (editGroup.size() > 0) {
-		editGroup.remove();
+	if (activate)
+	{
+		if (!this.signalEditor)
+		{
+			var editGroup = this.group.selectAll("g.editSignalGroup");
+			if (editGroup.size() > 0) {
+				editGroup.remove();
+			}
+
+			var options = this.options;
+			var editorW = options.SIGNAL_W - options.SIGNAL_PAD*2;
+			var editorH = options.SIGNAL_H - options.SIGNAL_PAD*2;
+
+			var editGroup = this.group.append("g")
+				.attr("class", "editSignalGroup")
+				.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
+				.attr("visibility", this.mode == SIGNAL_EDIT ? "visible" : "hidden");
+
+			this.signalEditor = new SignalEditor(editGroup, editorW, editorH, this.avgSeries, "weekly");
+		}
+
+		// cause heatmap to show distance to edited example (instead of crime levels)
+		gridAnalysis.showDistanceToExample(this.signalEditor.getEditedSeries());
 	}
-
-	var options = this.options;
-	var editorW = options.SIGNAL_W - options.SIGNAL_PAD*2;
-	var editorH = options.SIGNAL_H - options.SIGNAL_PAD*2;
-
-	var editGroup = this.group.append("g")
-		.attr("class", "editSignalGroup")
-		.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
-		.attr("visibility", this.mode == SIGNAL_EDIT ? "visible" : "hidden");
-
-	this.signalEditor = new SignalEditor(editGroup, editorW, editorH, this.avgSeries, "weekly");
+	else
+	{
+		// deactivate editor
+		// return heatmap to show crime levels
+		gridAnalysis.showDistanceToExample();
+	}
 }
 
 SignalVis.prototype.updateSignals = function()
