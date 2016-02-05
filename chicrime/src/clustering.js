@@ -274,7 +274,6 @@ Clustering.prototype.kMedoids = function(_K)
 	for (var i=0, M=unassigned.length; i<M; i++) 
 	{
 		var e = unassigned[i];
-		var minI = 0;
 		var minC = clusterList[0];
 		var minD = distanceMatrix[minC.medoid][e];
 
@@ -282,15 +281,14 @@ Clustering.prototype.kMedoids = function(_K)
 		{
 			var cluster = clusterList[c];
 			var d = distanceMatrix[cluster.medoid][e];
-			if (d < minD || (d == minD && Math.random() > 0.5))
+			if (d < minD || (d == minD && Math.random() > 1.5))
 			{
-				minC = cluster; minD = d;
-				minI = c;
+				minC = cluster;
+				minD = d;
 			}
 		}
 		minC.members.push(e);
 	}
-	unassigned = [];
 
 	var oldCost = null, totalCost = null, costDeltaStable = 0, totalMedoidShift = 0;
 	var iteration = 0;
@@ -307,7 +305,6 @@ Clustering.prototype.kMedoids = function(_K)
 			var cluster = clusterList[c];
 			var allMembers = cluster.members.concat([cluster.medoid]);
 			var minCost = null, minI = null;
-			var comparisons = 0;
 
 			for (var i=0, len=allMembers.length; i<len; i++) 
 			{
@@ -316,7 +313,6 @@ Clustering.prototype.kMedoids = function(_K)
 				for (var j=0; j<len; j++) 
 				{
 					cost += i == j ? 0 : distanceMatrix[m][allMembers[j]];
-					comparisons++;
 				}
 				if (minCost === null || cost < minCost) 
 				{
@@ -363,7 +359,7 @@ Clustering.prototype.kMedoids = function(_K)
 						var otherCluster = clusterList[j];
 						var d = distanceMatrix[otherCluster.medoid][m];
 
-						if (d < curD || (d == curD && Math.random() > 0.5)) 
+						if (d < curD || (d == curD && Math.random() > 1.5)) 
 						{
 							curD = d;
 							newHome = otherCluster;
@@ -385,8 +381,7 @@ Clustering.prototype.kMedoids = function(_K)
 					i--;
 
 					// adjust total cost
-					totalCost = totalCost - oldD + curD;
-					moves++;
+					totalCost += curD - oldD;
 				}
 			}
 		}
@@ -405,20 +400,10 @@ Clustering.prototype.kMedoids = function(_K)
 		if (oldCost) 
 		{
 			var costDelta = totalCost - oldCost;
-			
-			/*
-			// print information to console
-			console.log(iteration + ":\t delta: " + 
-				(costDelta >= 0 ? " " : "") + costDelta.toFixed(3) + 
-				", total: " + totalCost.toFixed(3) + 
-				", medoids: " + medoidShifted + 
-				", moves: " + moves
-			);
-			*/
-
-			if (Math.abs(costDelta) < 0.005) {
+			if (Math.abs(costDelta) < 0.0005) {
 				costDeltaStable++;
-			} else {
+			} else 
+			{
 				costDeltaStable = 0;
 			}
 

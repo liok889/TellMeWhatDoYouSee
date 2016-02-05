@@ -7,6 +7,7 @@
 var SIGNAL_INDIVIDUAL = 0;
 var SIGNAL_AVG = 1;
 var SIGNAL_DIFF = 2;
+var SIGNAL_EDIT = 3;
 
 // constants
 // ==========
@@ -88,7 +89,7 @@ Signal.prototype.updateTimeseries = function()
 		.attr("d", pathGenerator(timeseries.getSeries()));
 }
 
-function generateSignalPath(group, timeseries, color)
+function generateSignalPath(group, timeseries, color, duration)
 {
 	// actual path generator
 	var pathGenerator = timeseries.getPathGenerator(SIGNAL_W, SIGNAL_H, SIGNAL_PAD);
@@ -111,8 +112,11 @@ function generateSignalPath(group, timeseries, color)
 		.attr("d", baselinePathGenerator(timeseries.getSeries()))
 		.style("stroke", color || "black");
 
-	path.transition()
-		.attr("d", pathGenerator(timeseries.getSeries()));
+	var transition = path.transition()
+	if (!isNaN(duration)) {
+		transition = transition.duration(duration);
+	}
+	transition.attr("d", pathGenerator(timeseries.getSeries()));
 
 	return {
 		pathG: pathG,
@@ -225,7 +229,7 @@ SignalVis.prototype.init = function()
 				})
 				.on("click", function() 
 				{
-					thisSignalVis.mode = (thisSignalVis.mode + 1) % 3;
+					thisSignalVis.mode = (thisSignalVis.mode + 1) % 4;
 					thisSignalVis.updateMode();
 					thisSignalVis.updateYAxis();
 				});
@@ -249,15 +253,20 @@ SignalVis.prototype.updateMode = function()
 	switch (this.mode)
 	{
 	case SIGNAL_INDIVIDUAL:
-		visVector = [true, false, false];
+		visVector = [true, false, false, false];
 		break;
 
 	case SIGNAL_AVG:
-		visVector = [false, true, false];
+		visVector = [false, true, false, false];
 		break;
 
 	case SIGNAL_DIFF:
-		visVector = [false, false, true];
+		visVector = [false, false, true, false];
+		break;
+	
+	case SIGNAL_EDIT:
+		visVector = [false, false, false, true];
+		this.editSignal();
 		break;
 	}
 
@@ -269,6 +278,9 @@ SignalVis.prototype.updateMode = function()
 		.attr("visibility", visVector[2] ? "visible" : "hidden");
 	this.group.selectAll("g.brushSignalGroup")
 		.attr("visibility", visVector[2] ? "hidden" : "visible");
+	this.group.selectAll("g.editSignalGroup")
+		.attr("visibility", visVector[3] ? "visible" : "hidden");
+
 
 }
 
@@ -345,6 +357,25 @@ SignalVis.prototype.updateOneSignal = function(selection)
 	else {
 		return false;
 	}
+}
+
+SignalVis.prototype.editSignal = function()
+{
+	var editGroup = this.group.selectAll("g.editSignalGroup");
+	if (editGroup.size() > 0) {
+		editGroup.remove();
+	}
+
+	var options = this.options;
+	var editorW = options.SIGNAL_W - options.SIGNAL_PAD*2;
+	var editorH = options.SIGNAL_H - options.SIGNAL_PAD*2;
+
+	var editGroup = this.group.append("g")
+		.attr("class", "editSignalGroup")
+		.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
+		.attr("visibility", this.mode == SIGNAL_EDIT ? "visible" : "hidden");
+
+	this.signalEditor = new SignalEditor(editGroup, editorW, editorH, this.avgSeries, "weekly");
 }
 
 SignalVis.prototype.updateSignals = function()
@@ -567,7 +598,7 @@ SignalVis.prototype.calcAvgSignal = function()
 		.attr("transform", "translate(" + options.SIGNAL_X_OFFSET + ",0)");
 	
 	// generate a signal path
-	generateSignalPath(g, this.avgSeries, "white");
+	generateSignalPath(g, this.avgSeries, "#444444");
 
 	// update, if no enter
 	if (updateAvg.enter().size() == 0) 

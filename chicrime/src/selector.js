@@ -273,7 +273,8 @@ ClusterSelector.prototype.updateSelections = function()
 		var members = selection.getMembers();
 		for (var j=0, K=members.length; j<K; j++) 
 		{
-			colorMap.set( members[j].id, selection.color );
+			var interpolator = d3.interpolate( selection.color, "#ffffff" );
+			colorMap.set( members[j].id, selection.color == ClusterSelector.LAST_COLOR ? selection.color : interpolator(0.25) );
 
 		}
 	}
@@ -547,7 +548,7 @@ function calcAvgTimeseries(members)
 // ==========
 //ClusterSelector.DEFAULT_COLORS = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2'].reverse();
 //ClusterSelector.DEFAULT_COLORS = ['#fb8072','#80b1d3','#fdb462','#8dd3c7', '#bebada','#b3de69','#fccde5','#d9d9d9'].reverse();
-ClusterSelector.DEFAULT_COLORS = ['#fdbf6f', '#a6cee3','#b2df8a','#cab2d6','#1f78b4',,'#33a02c','#ff7f00','#6a3d9a', '#e31a1c','#b15928'];
+ClusterSelector.DEFAULT_COLORS = ['#fdbf6f', '#a6cee3','#b2df8a','#cab2d6','#1f78b4',,'#33a02c','#ff7f00','#6a3d9a', /*'#e31a1c',*/'#b15928'];
 
 ClusterSelector.SELECTION_COLORS = null;
 ClusterSelector.LAST_COLOR = '#d9d9d9';
