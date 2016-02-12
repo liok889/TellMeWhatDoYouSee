@@ -4,10 +4,14 @@
  * ============================================
  */
 
-function Timeseries(_series)
+function Timeseries(_series, shallow)
 {
 	this.series = [];
-	if (_series) 
+	if (shallow)
+	{
+		this.series = _series;
+	}
+	else if (_series && !shallow) 
 	{
 		// deep copy series
 		var seriesMax = -Number.MAX_NUMBER;
@@ -19,6 +23,7 @@ function Timeseries(_series)
 
 		this.seriesMax = seriesMax;
 	}
+
 }
 
 Timeseries.prototype.size = function() {
@@ -254,9 +259,23 @@ Timeseries.prototype.distanceEDR = function(anotherSeries)
 	var N = nS.length;
 
 	var G = anotherSeries.grid;
-	if (!G) {
-		G = getGrid(nR);
-		anotherSeries.grid = G;
+	if (!G) 
+	{
+		G = this.grid;
+		if (G) 
+		{
+			// flip nS and nR
+			var tmp = nR;
+			nR = nS;
+			nS = tmp;
+			M = nR.length;
+			N = nS.length;
+		}
+		else
+		{
+			G = getGrid(nR);
+			anotherSeries.grid = G;
+		}
 	}
 
 	// get intersections between the two timeseries
@@ -316,7 +335,7 @@ Timeseries.prototype.distanceEDR = function(anotherSeries)
 			}
 		}
 
-		for (i=c; i <= theMax+1; i++) 
+		for (var i=c; i <= theMax+1; i++) 
 		{
 			if (temp < matches[i] - 1 && temp < M-1) 
 			{
@@ -488,4 +507,6 @@ function getBagOfStrings(data)
 
 	return localBag;
 }
+
+if (typeof module !== "undefined") module.exports = Timeseries;
 

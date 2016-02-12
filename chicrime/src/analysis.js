@@ -232,6 +232,14 @@ GridAnalysis.prototype.setSignalAggregate = function(signalAggregate)
 	this.analysisRequest.signalAggregate = signalAggregate;
 }
 
+GridAnalysis.prototype.setSignalFilter = function(filters)
+{
+	for (var i=0, N=filters.length; i<N; i++) {
+		var filter = filters[i];
+		this.analysisRequest[ filter.filter ] = filter.value;
+	}
+}
+
 GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
@@ -983,37 +991,11 @@ function symmetrizeSimMatrix(matrix)
 		matrix[i][i] = 0;
 		for (var j = i+1; j < n; j++) 
 		{
-			matrix[j][i] *= -1;
-			matrix[i][j] = matrix[j][i];
+			var e = Math.abs(matrix[j][i]);
+			matrix[j][i] = e;
+			matrix[i][j] = e;
 		}
 	}
 	return matrix;
-}
-
-function invertSimMatrix(matrix)
-{
-	var n = matrix.length;
-	for (var i=0; i<n; i++) 
-	{
-		for (var j=0; j<i; j++) 
-		{
-			matrix[i][j] *= -1;
-		}
-	}
-	return matrix;	
-}
-
-function testSymmetry(matrix) {
-
-	for (var i=0, len=matrix.length; i<len; i++) {
-		for (var j=0; j < i; j++) {
-			if (matrix[i][j] !== matrix[j][i])
-			{
-				console.error("** MATRIX not symmetric at " + i + " x " + j);
-				return false;
-			}
-		}
-	}
-	return true;
 }
 

@@ -12,6 +12,7 @@
 "use strict";
 
 var HashMap = require("hashmap");
+var Timeseries = require("../src/ts.js");
 
 var EQUIPROBABLE_BREAKS = false;
 var P_HIST_BINS = 200;
@@ -36,6 +37,7 @@ function TimeSeriesDictionary(alphabetSize, wordSize, windowSize)
 	// create a dictionary
 	this.dictionary = new HashMap();
 	this.timeSeriesCount = 0;
+	this.meanNormalizedSeries = [];
 }
 
 TimeSeriesDictionary.prototype.getTimeSeriesCount = function() {
@@ -140,6 +142,32 @@ TimeSeriesDictionary.prototype.calcSimilarityMatrix = function()
 	})(matrix, this.timeSeriesCount, this.dictionary);
 	
 	console.log("similarity calculation work: " + WORK + " accesses to matrix");
+	return matrix;
+}
+
+TimeSeriesDictionary.prototype.addTimeSeriesEDR = function(data)
+{
+	this.meanNormalizedSeries.push(new Timeseries(data, true));
+}
+
+TimeSeriesDictionary.prototype.calcSimilarityMatrixEDR = function()
+{
+	var allSeries = this.meanNormalizedSeries;
+	var nn = allSeries.length;
+	var matrix = new Array(nn);
+	for (var i = 0; i < nn; i++) 
+	{
+		var t1 = allSeries[i];
+		var row = new Array(i);
+
+		for (var j = 0; j < i; j++) 
+		{
+			var t2 = allSeries[j];
+			row[j] = t2.distanceEDR(t1);
+		}
+		matrix[i] = row;
+	}
+
 	return matrix;
 }
 

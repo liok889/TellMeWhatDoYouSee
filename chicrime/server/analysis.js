@@ -150,6 +150,7 @@ Analysis.prototype.calcSimilarityMatrix = function()
 	);
 
 	// put in distribution measurement
+	/*
 	for (var i=0, N=this.listOfSeries.length; i<N; i++) 
 	{
 		var s = this.listOfSeries[i];
@@ -159,16 +160,18 @@ Analysis.prototype.calcSimilarityMatrix = function()
 
 	// calculate equi-probably break points
 	tsDictionary.calcEquiprobableBreaks();
+	*/
 
 	// add time series to similarity analysis
-	for (var i=0, N=this.listOfSeries.length; i<N; i++) {
+	for (var i=0, N=this.listOfSeries.length; i<N; i++) 
+	{
 		var s = this.listOfSeries[i];
 		var timeseries = this.data[s.r][s.c];
-		tsDictionary.addTimeSeries(timeseries);
+		tsDictionary.addTimeSeriesEDR(timeseries);
 	}
 
 	// calculate similarity matrix
-	this.simMatrix = tsDictionary.calcSimilarityMatrix();
+	this.simMatrix = tsDictionary.calcSimilarityMatrixEDR();
 	
 	// measure time for the whole thing
 	var endTime = new Date();
@@ -180,7 +183,7 @@ Analysis.prototype.projectMDS = function(dimensions)
 {
 	console.log("Projecting MDS...");
 	var startTime = new Date();
-	var distances = convertSimilarityToDistance(this.simMatrix);
+	var distances = processRawMatrix(this.simMatrix);
 	dimensions = dimensions || 2;
 	
 	// square distances
@@ -219,7 +222,10 @@ function pow(x, y)
 	return Math.pow(x, y);
 }
 
-function convertSimilarityToDistance(matrix)
+// processes raw similarity / distance matrix received from backend
+//  1) makes a symmetric square matrix out of a traingular one
+//  2) makes sure matrix elements are ositive integers to reflect dis-similarity  
+function processRawMatrix(matrix)
 {
 	var n = matrix.length;
 	var distanceM = [];
@@ -237,7 +243,7 @@ function convertSimilarityToDistance(matrix)
 	{
 		for (var j = i+1; j < n; j++) 
 		{
-			var v = matrix[j][i] * -1;
+			var v = Math.abs(matrix[j][i]);
 			distanceM[i][j] = v;
 			distanceM[j][i] = v;			
 		}

@@ -166,6 +166,12 @@ function constructAggregateQuery(query)
 		});
 	}
 
+	if (query.crimeType && query.crimeType !== "ALL") {
+		match.$and.push({
+			crimeType: query.crimeType
+		});
+	}
+
 	// lat, lon limit
 	match.$and.push({ lat: {$gte: query.gridMin.lat, $lte: query.gridMax.lat} });
 	match.$and.push({ lon: {$gte: query.gridMin.lon, $lte: query.gridMax.lon} });
@@ -248,6 +254,9 @@ function constructAggregateQuery(query)
 	console.log("Aggregate query:")
 	console.log("\twarp: " + query.signalAggregate);
 	console.log("\trange: " + query.yearRange);
+	if (query.crimeType) {
+		console.log("\tcrime type: " + query.crimeType);
+	}
 
 	return {
 		stages: stages,
