@@ -114,6 +114,46 @@ Timeseries.prototype.clone = function()
 	return clone;
 }
 
+Timeseries.prototype.getMeanNormalized = function()
+{
+
+	if (this.meanNormalized) 
+	{
+		// already calculated
+		return this.meanNormalized;
+	}
+
+	var mean = 0;
+	var std = 0;
+	var series = this.series;
+	var N = this.series.length;
+
+	meanNormalized = [];
+	meanNormalized.length = N;
+	
+	if (N > 0)
+	{
+		// calculate mean
+		for (var i=0; i<N; i++) {
+			mean += series[i];
+		}
+		mean /= N;
+
+		// calculate standard deviation
+		for (var i=0; i<N; i++) {
+			std += Math.pow(series[i]-mean, 2);
+		}
+		std = Math.sqrt(std / N);
+
+		// mean normalize
+		for (var i=0; i<N; i++) {
+			meanNormalized[i] = (series[i]-mean) / std;
+		}
+	}
+
+	this.meanNormalized = meanNormalized;
+	return meanNormalized;
+}
 
 Timeseries.prototype.normalize = function()
 {
@@ -151,6 +191,8 @@ Timeseries.prototype.getPathGenerator = function(width, height, pad, constX, con
 Timeseries.prototype.invalidate = function()
 {
 	this.bagOfStrings = undefined;
+	this.meanNormalized = undefined;
+	this.grid = undefined;
 }
 
 // calculates distance between two timeseries (this and anotherSeries)
@@ -195,10 +237,168 @@ Timeseries.prototype.distance = function(anotherSeries)
 	})(_distance, this.bagOfStrings, anotherSeries.bagOfStrings);
 }
 
+/* ---------------------------------
+ * Edit Distance on Real Sequence
+ * ---------------------------------*/
+
+// Constants for EDR distance
+var EPSILON = 0.5;
+var MAX_STD = 4.0;
+var EPSILON_GRID = 2 * MAX_STD / EPSILON;
+
+Timeseries.prototype.distanceEDR = function(anotherSeries)
+{
+	var nR = anotherSeries.getMeanNormalized();
+	var nS = this.getMeanNormalized();
+	var M = nR.length;
+	var N = nS.length;
+
+	var G = anotherSeries.grid;
+	if (!G) {
+		G = getGrid(nR);
+		anotherSeries.grid = G;
+	}
+
+	// get intersections between the two timeseries
+	var intersections = getIntersections(nR, nS, G);
+
+	// calculate EDR 
+	// ==============
+	// initialize matches
+	var matches = []; 
+	matches.length = 2 * N + 1;
+	matches[0] = 0;
+	for (var i=1, len=matches.length; i<len; i++) {
+		matches[i] = M+1
+	}
+	var theMax = 0;
+
+	// initialize matches
+	for (var j=1; j<=N; j++) 
+	{
+		var c = 0;
+		var temp = matches[0];
+		var temp2 = matches[0];
+
+		var Lj = intersections[ j-1 ];
+		for (var k_in_Lj=0, len=Lj.length; k_in_Lj<len; k_in_Lj++)
+		{
+			var k = Lj[ k_in_Lj ] + 1;		// for algorithm purposes, array indices start at 1
+			if (temp < k) 
+			{
+				while (matches[c] < k) 
+				{
+					if (temp < matches[c] - 1 && temp < M - 1) {
+						temp2 = matches[c];
+						matches[c] = temp + 1;
+						temp = temp2;
+					}
+					else
+					{
+						temp = matches[c];
+					}
+					c++;
+				}
+				temp2 = matches[c];
+				matches[c] = temp + 1;
+				temp = matches[c + 1];
+				if (matches[c + 1] > k) { matches[c + 1] = k; }
+				if (theMax < c + 1) { theMax = c + 1; }
+				c += 2;
+			}
+			else if (temp2 < k && k < matches[c]) 
+			{
+				temp2 = temp;
+				temp = matches[c];
+				matches[c] = k;
+				if (theMax < c) { theMax = c; }
+				c++;
+			}
+		}
+
+		for (i=c; i <= theMax+1; i++) 
+		{
+			if (temp < matches[i] - 1 && temp < M-1) 
+			{
+				temp2 = matches[i];
+				matches[i] = temp + 1;
+				temp = temp2;
+				if (theMax < i) { theMax = i; }
+			}
+			else
+			{
+				temp = matches[i];
+			}
+		}
+	}
+	return (M+N) - theMax;
+}
+
+function getGrid(nR)
+{
+	var G = []; G.length = EPSILON_GRID;
+
+	for (var j=0; j<EPSILON_GRID; j++) {
+		G[j] = [];
+	}
+
+	for (var k=0, M=nR.length; k<M; k++) 
+	{
+		var r  = nR[k];
+		var x1 = Math.floor( (r - EPSILON + MAX_STD) / EPSILON )    ;
+		var x2 = Math.ceil ( (r + EPSILON + MAX_STD) / EPSILON ) - 1;
+		for (var j=Math.max(0, x1), jEnd = Math.min(EPSILON_GRID-1, x2); j<=jEnd; j++) 
+		{
+			G[j].push(k);
+		}
+	}
+	return G;	
+}
+
+function getIntersections(nR, nS, G)
+{
+	var N = nS.length;
+	var intersections = []; intersections.length = N;
+
+	for (var i=0; i<N; i++)
+	{
+		var nSi = nS[i];
+		var Li = [];
+
+		// index in the grid where nS[i] falls
+		// also make sure index stays within range of grid
+		var s = Math.floor((nSi + MAX_STD) / EPSILON);
+		if (s >= EPSILON_GRID) {
+			s = EPSILON_GRID-1; 
+		} 
+		else if (s < 0) {
+			s=0;
+		}
+
+		// get grid element
+		var g = G[s];
+		for (var j=0, len=g.length; j<len; j++) 
+		{
+			var k = g[j];
+			if (Math.abs(nSi - nR[k]) < EPSILON) {
+				Li.push(k);
+			}
+		}
+		intersections[i] = Li;
+	}
+
+	return intersections;
+}
+
+/* ---------------------------------
+ * Bag of Strings similarity
+ * ---------------------------------*/
 var ALPHABET_SIZE 	= 5;
 var WORD_SIZE 		= 8;
 var WINDOW_SIZE 	= 40;
 var BREAK_POINTS = 	[ -0.84, -0.25, 0.25, 0.84 ];
+
+
 
 function getBagOfStrings(data) 
 {

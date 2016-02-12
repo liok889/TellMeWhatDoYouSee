@@ -21,8 +21,9 @@ function GridAnalysis(theMap, svgExplore)
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
 
 	// add exploration pane
+	var exploreOffset = getCoords(this.svgExplore.node());
 	var gExplore = this.svgExplore.append("g");
-	this.explore = new Explore(gExplore);
+	this.explore = new Explore(gExplore, {xOffset: exploreOffset.left, yOffset: exploreOffset.top});
 
 	// initialize callbacks for explore pane
 	(function(grid) 
@@ -117,18 +118,9 @@ function GridAnalysis(theMap, svgExplore)
 			}
 		];
 
-		// active buttons
-		for (var i=0, N=buttonCallbacks.length; i<N; i++) {
-			var b = buttonCallbacks[i];
-			d3.select("#" + b.id)
-				.style("padding", "2px")
-				.on("click", b.callback)
-				.on("mouseover", function() { 
-					d3.select(this)
-						.style("border", "solid 1.5px red"); 
-				})
-				.on("mouseout", function() { d3.select(this).style("border", "")});
-		}
+		activateButtons(buttonCallbacks);
+
+		
 	})(this);
 }
 
@@ -663,7 +655,7 @@ GridAnalysis.prototype.showDistanceToExample = function(example)
 		for (var i=0; i<N; i++) 
 		{
 			var ts = this.getTimeseries(i);
-			var distance = ts.distance(example);
+			var distance = ts.distanceEDR(example);
 			distanceList.push( distance );
 		}
 
@@ -690,7 +682,7 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList)
 
 	// make color scale
 	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
-	var DISTANCE_COLOR = ['#ffffcc','#c7e9b4','#7fcdbb','#41b6c4','#1d91c0','#225ea8','#0c2c84'].reverse();
+	var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
 
 	var _logScale = d3.scale.log().domain([1, maxD+1]).range([0, 1]);
 	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);

@@ -128,11 +128,14 @@ function generateSignalPath(group, timeseries, color, duration)
 // ==================================
 // SignalVis
 // ==================================
-function SignalVis(g, options)
+var SIGNAL_VIS_SERIAL = 0;
+
+function SignalVis(g, options, offset)
 {
 	// group
 	this.mode = SIGNAL_INDIVIDUAL;
 	this.group = g;
+	this.offset = offset;
 
 	// list of signals we want to callback on updates
 	this.updateCallbacks = [];
@@ -149,6 +152,7 @@ function SignalVis(g, options)
 	};
 
 	// initialize	
+	this.id = ++SIGNAL_VIS_SERIAL;
 	this.init();
 }
 
@@ -203,6 +207,8 @@ SignalVis.prototype.init = function()
 	var options = this.options;
 	var width  = options.SIGNAL_W + options.SIGNAL_W_PAD + options.SIGNAL_X_OFFSET
 	var height = options.SIGNAL_H + options.SIGNAL_H_PAD;
+	this.width = width;
+	this.height = height;
 
 	// add a rectangle to this group
 	this.bgRect = this.group.append("rect")
@@ -216,6 +222,7 @@ SignalVis.prototype.init = function()
 			var cx = options.SIGNAL_W + options.SIGNAL_W_PAD + options.SIGNAL_X_OFFSET + CIRCLE_OFFSET + CIRCLE_R;
 			var cy = CIRCLE_R + CIRCLE_OFFSET;
 
+			/*
 			thisSignalVis.modeCircle = thisSignalVis.group.append("circle")
 				.attr("cx", cx)
 				.attr("cy", cy)
@@ -239,8 +246,48 @@ SignalVis.prototype.init = function()
 
 					// update display and yAxis
 					thisSignalVis.updateMode(oldMode);
-					thisSignalVis.updateYAxis();
 				});
+			*/
+
+			var buttons = [
+				{
+					id: "imgButtonTrends",
+					asset: "assets/multiple.svg",
+					callback: function() { switchMode(SIGNAL_INDIVIDUAL); }
+				},
+				{
+					id: "imgButtonDiff",
+					asset: "assets/compare.svg",
+					callback: function() { switchMode(SIGNAL_DIFF); },
+				},
+				{
+					id: "imgButtonEdit",
+					asset: "assets/edit.svg",
+					callback: function() { switchMode(SIGNAL_EDIT); },
+					dblCallback: function() { thisSignalVis.clearEdit(); }
+				}
+			];
+
+			for (var i=0, N=buttons.length; i<N; i++) {
+				var button = buttons[i];
+				var img = d3.select(document).selectAll("body").append("img")
+					.attr("src", button.asset)
+					.attr("id", button.id + "_" + thisSignalVis.id)
+					.attr("width", 15).attr("height", 15)
+					.style("position", "absolute")
+					.style("left", (thisSignalVis.offset.xOffset + thisSignalVis.width + 4) + "px")
+					.style("top", (thisSignalVis.offset.yOffset + (i*(15+5))) + "px")
+					.style("z-index", "6000");
+				button.id = button.id + "_" + thisSignalVis.id;
+			}
+			activateButtons(buttons);
+
+			function switchMode(newMode) 
+			{
+				var oldMode = thisSignalVis.mode;
+				thisSignalVis.mode = newMode;
+				thisSignalVis.updateMode(oldMode);
+			}
 		})(this, this.options);
 	}
 
@@ -292,6 +339,10 @@ SignalVis.prototype.updateMode = function(oldMode)
 		.attr("visibility", visVector[2] ? "hidden" : "visible");
 	this.group.selectAll("g.editSignalGroup")
 		.attr("visibility", visVector[3] ? "visible" : "hidden");
+	
+
+	// change the scale of Y axis (sometimes necessary)
+	this.updateYAxis();
 
 
 }
@@ -337,10 +388,19 @@ SignalVis.prototype.removeSignal = function(selection)
 	}
 }
 
+SignalVis.prototype.clearEdit = function()
+{
+	this.group.selectAll("g.editSignalGroup").remove();
+	this.signalEditor = undefined;
+	this.activateEditor(true);
+}
+
 SignalVis.prototype.clearAll = function()
 {
 	this.signals = [];
 	this.updateSignals();
+	this.signalEditor = undefined;
+	this.group.selectAll("g.editSignalGroup").remove();
 }
 
 SignalVis.prototype.opposingUpdate = function()
@@ -510,6 +570,7 @@ SignalVis.prototype.updateSignals = function()
 	// calculate signal difference
 	this.calcDiffSignal();
 
+	/*
 	if (this.signals.length == 0) 
 	{
 		this.modeCircle.attr("visibility", "visible");
@@ -518,6 +579,7 @@ SignalVis.prototype.updateSignals = function()
 	{
 		this.modeCircle.attr("visibility", "visible");
 	}
+	*/
 
 	// do callbacks
 	for (var i=0, N=this.updateCallbacks.length; i<N; i++) 
@@ -875,9 +937,10 @@ SignalVis.prototype.jiggleSignal = function(_g)
 // ==================================
 // Explore
 // ==================================
-function Explore(svg)
+function Explore(svg, offset)
 {
 	this.svg = svg;
+	this.offset = offset;
 	this.signalMultiples = [];
 	this.signalList = [];
 
@@ -893,7 +956,7 @@ function Explore(svg)
 		for (var j=0; j<Explore.COLS; j++, xOffset += X_OFFSET) 
 		{
 			var g = svg.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
-			var signalVis = new SignalVis(g);
+			var signalVis = new SignalVis(g, null, {xOffset: xOffset + this.offset.xOffset, yOffset: yOffset + this.offset.yOffset});
 			visRow.push(signalVis);
 			this.signalList.push(signalVis);
 
