@@ -102,7 +102,8 @@ Selection.prototype.populateSelection = function(g)
 			.attr("x", imgX)
 			.attr("y", 4 + imgH)
 			.attr("width", imgH)
-			.attr("height", imgH);
+			.attr("height", imgH)
+			.style("visibility", "hidden");
 
 		thisSelection.content
 			.on("mouseover", function() 
@@ -552,8 +553,8 @@ ClusterSelector.DEFAULT_COLORS = ['#fdbf6f', '#a6cee3','#b2df8a','#cab2d6','#1f7
 
 ClusterSelector.SELECTION_COLORS = null;
 ClusterSelector.LAST_COLOR = '#d9d9d9';
-ClusterSelector.RECT_W = 140;
-ClusterSelector.RECT_H = 37;
+ClusterSelector.RECT_W = 120;
+ClusterSelector.RECT_H = 35;
 ClusterSelector.RECT_PAD = 3;
 ClusterSelector.RECT_OFFSET = 2;
 

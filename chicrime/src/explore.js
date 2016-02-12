@@ -555,7 +555,7 @@ SignalVis.prototype.updateSignals = function()
 				//.attr("cx", SIGNAL_W + OFFSET + R)
 				.attr("cy", function(d, i) { return options.SIGNAL_H + options.SIGNAL_H_PAD - R - i*(2*R+OFFSET);})
 				.attr("r", R)
-				.style("fill-opacity", "1.0");
+				.style("fill-opacity", "0.6");
 
 			update.exit().transition().style("fill-opacity", "0.0")
 				.each(function(signal) { thisSignalVis.brushSignal(null)})

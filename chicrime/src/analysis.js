@@ -15,7 +15,7 @@ function GridAnalysis(theMap, svgExplore)
 	this.svgExplore = svgExplore;
 
 	// create a selection object
-	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2);
+	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8);
 	var yOffset = ClusterSelector.RECT_OFFSET + 12;
 	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
@@ -660,11 +660,11 @@ GridAnalysis.prototype.showDistanceToExample = function(example)
 		}
 
 		// plot distance heatmap
-		this.showDistanceHeatmap( distanceList );
+		this.showDistanceHeatmap( distanceList, example.size()*2 );
 	}
 }
 
-GridAnalysis.prototype.showDistanceHeatmap = function(distanceList)
+GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 {
 	// figure out min/max in distance list
 	var minD = Number.MAX_VALUE, maxD = -Number.MAX_VALUE;
@@ -682,9 +682,10 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList)
 
 	// make color scale
 	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
-	var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
+	//var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
+	var DISTANCE_COLOR = ['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
 
-	var _logScale = d3.scale.log().domain([1, maxD+1]).range([0, 1]);
+	var _logScale = d3.scale.log().domain([1, (maxDistance ? maxDistance : maxD)+1]).range([0, 1]);
 	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);
 	
 	(function(ij2index, heatmapSelection, colorScale, logScale, distances) 
