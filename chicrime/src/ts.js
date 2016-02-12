@@ -273,13 +273,13 @@ Timeseries.prototype.distanceEDR = function(anotherSeries)
 		}
 		else
 		{
-			G = getGrid(nR);
+			G = getEpsilonGrid(nR);
 			anotherSeries.grid = G;
 		}
 	}
 
 	// get intersections between the two timeseries
-	var intersections = getIntersections(nR, nS, G);
+	var intersections = getEpsilonIntersections(nR, nS, G);
 
 	// calculate EDR 
 	// ==============
@@ -353,7 +353,7 @@ Timeseries.prototype.distanceEDR = function(anotherSeries)
 	return (M+N) - theMax;
 }
 
-function getGrid(nR)
+function getEpsilonGrid(nR)
 {
 	var G = []; G.length = EPSILON_GRID;
 
@@ -374,7 +374,7 @@ function getGrid(nR)
 	return G;	
 }
 
-function getIntersections(nR, nS, G)
+function getEpsilonIntersections(nR, nS, G)
 {
 	var N = nS.length;
 	var intersections = []; intersections.length = N;
