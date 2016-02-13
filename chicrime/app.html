@@ -236,39 +236,29 @@
 		</form>
 	</div>
 
-	<div id="featurePane" style="position: absolute; top: 250px; left: 1385px; background: #f3f3f3; width: 150px; height: 200px; border: solid 1px #cccccc; padding: 5px 10px">
+	<div id="featurePane" style="position: absolute; top: 250px; left: 1385px; background: #f3f3f3; width: 150px; height: 250px; border: solid 1px #cccccc; padding: 5px 10px">
 		<!--<div class="sectionLabel">Signal</div>-->
 		
 		<span id="labelYearlyRange">year</span>
 		<div id="sliderYearlyRange" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
-		<br>
-		
-		<!--
-		<b>aggregate</b>
-		<form>
-			<input value="yearly" name="signalAggregate" id="radioWarpYearly" type="radio">yearly (day)<br>
-			<input value="monthly" name="signalAggregate" id="radioWarpMonthly" type="radio">monthly (6 hours)<br>
-			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">weekly (1 hour)<br>
-			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">daily (30 min)<br>
 
-			
-			<input id="buttonRunAnalysis" type="button" value="update" style="background: #FFDDDD;font-family: helvetica; font-size: 10pt; font-weight: 100">
-		</form>
-		-->
+		<form  id="signalForm">		
+			<b>time series</b>
+			<input value="yearly" name="signalAggregate" id="radioWarpYearly" type="radio">Year (daily)<br>
+			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">Week (hourly)<br>
+			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">Day (30 min)<br>
 
-		<b>crime type</b>
-		<form>
-			<input value="crimeAll" checked name="crimeType" id="radioCrimeAll" type="radio">All crimes<br>
-			<input value="MOTOR VEHICLE THEFT"  name="crimeType" id="radioCrimeCarTheft" type="radio">Vehicle theft<br>
-			<input value="BURGLARY" name="crimeType" id="radioCrimeBurglary" type="radio">Burglary<br>
+			<span style="font-weight: bold">crime type</span><br>
+			<input value="ALL" checked name="crimeType" id="radioCrimeAll" type="radio">All crimes<br>
+			<input value="THEFT"  name="crimeType" id="radioTheft" type="radio">Theft<br>
 			<input value="ASSAULT" name="crimeType" id="radioAssault" type="radio">Assault and battery<br>
 			<input value="NARCOTICS" name="crimeType" id="radioNarcotics" type="radio">Narcotics<br>
+			<input value="BURGLARY" name="crimeType" id="radioCrimeBurglary" type="radio">Burglary<br>
 			<input value="HOMICIDE" name="crimeType" id="radioHomicide" type="radio">Homicide<br>
 
-			<input id="buttonRunAnalysis" type="button" value="update" style="background: #FFDDDD;font-family: helvetica; font-size: 10pt; font-weight: 100">
+			<!--
+			<input id="buttonRunAnalysis" type="button" value="update" style="background: #FFDDDD;font-family: helvetica; font-size: 10pt; font-weight: 100">-->
 		</form>
-
-
 
 		<div id="loadSpinnerPlaceholder" style="position: relative; left: 35px; top: -30px; width: 100px; height: 30px; margin-top: 2px; margin-bottom: 0px"><div id="loadSpinner" class="loader" style="width: 20px; visibility: hidden"></div></div>
 	</div>
@@ -396,23 +386,38 @@
 
 			// yearly range
 			$("#sliderYearlyRange").slider({
-				range: true,
-				min: 2002, max: 2014, step: 1,
-				values: YEAR_RANGE,
+				range: false,
+				min: 2002, max: 2015, step: 1,
+				value: 2015,
 				change: function( event, ui ) {
-					$("#labelYearlyRange").html("<b>year:</b> " + ui.values[0] + "-" + ui.values[1]);
-					YEAR_RANGE = ui.values;
-
+					var label;
+					if ( ui.value == 2015) {
+						YEAR_RANGE = [2002, 2014];
+						label = '2002 - 2014'; 
+					}
+					else
+					{
+						YEAR_RANGE = [ui.value, ui.value];
+						label = ui.value;
+					}
+					$("#labelYearlyRange").html("<span style=\"font-weight: bold\">year:</span> " + label);
+					run_analysis();
 				}
 			});
-			$("#labelYearlyRange").html("<b>year:</b> " + YEAR_RANGE[0] + "-" + YEAR_RANGE[1]);
+			$("#labelYearlyRange").html("<span style=\"font-weight: bold\">year:</span> " + YEAR_RANGE[0] + "-" + YEAR_RANGE[1]);
 
 
+			// arm all inputs to trigger analysis run
+			d3.select("#signalForm").selectAll("input").on("click", function() {
+				run_analysis();
+			});
+			/*
 			// run analysis
 			d3.select("#buttonRunAnalysis").on("click", function() 
 			{
 				run_analysis();
 			});
+			*/
 
 		}
 
@@ -696,12 +701,11 @@
 			// set type of aggregation
 			var signalAggregate = $('input[name="signalAggregate"]:checked').val();
 			var signalFilter = $('input[name="crimeType"]:checked').val();
-			if (signalFilter && signalFilter !== "crimeAll") {
-			} else {
-				signalFilter = "ALL";
+			
+			if (signalFilter === "ASSAULT") {
+				signalFilter = ["ASSAULT", "BATTERY"];
 			}
-
-			gridAnalysis.setSignalAggregate("weekly" /*signalAggregate*/);
+			gridAnalysis.setSignalAggregate(signalAggregate);
 			
 			if (signalFilter.length > 0) {
 				gridAnalysis.setSignalFilter([ {filter: "crimeType", value: signalFilter} ]);
