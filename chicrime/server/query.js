@@ -36,7 +36,6 @@ module.exports = {
 		var _queryHash = md5Hash.update(JSON.stringify(query)).digest('hex');
 		var cachedResults = cache.get(_queryHash);
 		
-		console.log("query hash: " + _queryHash + ", found: " + (cachedResults ? "yes" : "no"));
 		if (cachedResults)
 		{
 			// callback and return data

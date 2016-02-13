@@ -157,8 +157,11 @@ SignalEditor.prototype.mousedrag = function(mouse)
 	for (var i=0, len=this.selections.length; i<len; i++) 
 	{
 		var range = this.selections[i];
+		var rangeMiddle = (range[0] + range[1]) / 2;
 
-		for (var r=range[0]; r<=range[1]; r++) {
+		for (var r=range[0]; r<=range[1]; r++) 
+		{
+			// module pN
 			if (pN > 0 && (series[r] + pN > 1.0)) {
 				pN = 1.0 - series[r];
 			}
@@ -168,8 +171,11 @@ SignalEditor.prototype.mousedrag = function(mouse)
 		}
 
 		// do the adjustment
-		for (var r=range[0]; r<=range[1]; r++) {
-			series[r] += pN;
+		for (var r=range[0]; r<=range[1]; r++) 
+		{
+			var ppN = 1.0 - Math.max(0, Math.min(1, Math.abs(rangeMiddle-r) / this.selectionRange));
+			ppN *= pN
+			series[r] += ppN;
 		}
 	}
 

@@ -48,10 +48,13 @@ http.createServer(function(req, res) {
 						case 'aggregateCrimeCountOverGrid':
 							
 							// aggregate crime count over grid
-							crimesQuery.aggregateCrimeCountOverGrid(jsonRequest, function(results) {
-								res.write(JSON.stringify(results));
-								res.end();
-							});
+							(function (query) {
+								crimesQuery.aggregateCrimeCountOverGrid(jsonRequest, function(results) {
+									results.originalQuery = jsonRequest;
+									res.write(JSON.stringify(results));
+									res.end();
+								});
+							})(jsonRequest.query);
 							break;
 					}
 

@@ -265,14 +265,36 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			success: function(response, textStatus, xhr) 
 			{
 				// parse the JSON reponse we received
-				gridAnalysis.analysisResults = JSON.parse(response);
+				var results = JSON.parse(response)
+				var received = results.originalQuery;
+				var expected = gridAnalysis.analysisRequest;
 
-				// data ready
-				gridAnalysis.data_ready();
+				// only react to latest data
+				if (received !== undefined &&
+					received.signalAggregate 	=== expected.signalAggregate &&
+					received.limitYear 			=== expected.limitYear &&
+					(
+						(Array.isArray(received.yearRange) && Array.isArray(expected.yearRange) &&
+						received.yearRange[0] == expected.yearRange[0] && 
+						received.yearRange[1] == expected.yearRange[1]) ||
+						(received.yearRange === expected.yearRange)
+					)
+				) {
 
-				// callback to UI
-				if (callback) {
-					callback(true);
+					// store results
+					gridAnalysis.analysisResults = results;
+
+					// data ready
+					gridAnalysis.data_ready();
+
+					// callback to UI
+					if (callback) {
+						callback(true);
+					}
+				}
+				else
+				{
+					console.log("Older results.");
 				}
 			},
 
