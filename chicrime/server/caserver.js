@@ -57,7 +57,8 @@ http.createServer(function(req, res) {
 									{
 										signalAggregate: 	jsonRequest.signalAggregate,
 										limitYear: 			jsonRequest.limitYear,
-										yearRange: 			jsonRequest.yearRange
+										yearRange: 			jsonRequest.yearRange,
+										crimeType:  		jsonRequest.crimeType
 									};
 
 									res.write(JSON.stringify(results));

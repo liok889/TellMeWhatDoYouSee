@@ -274,6 +274,10 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 					received.signalAggregate 	=== expected.signalAggregate &&
 					received.limitYear 			=== expected.limitYear &&
 					(
+						(received.crimeType		=== expected.crimeType) ||
+						(Array.isArray(received.crimeType) && Array.isArray(expected.crimeType))
+					) &&
+					(
 						(Array.isArray(received.yearRange) && Array.isArray(expected.yearRange) &&
 						received.yearRange[0] == expected.yearRange[0] && 
 						received.yearRange[1] == expected.yearRange[1]) ||
