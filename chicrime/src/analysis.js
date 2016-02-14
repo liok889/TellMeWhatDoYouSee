@@ -10,6 +10,9 @@ var SHOW_SMALL_MULTIPATTERNS = 2;
 
 function GridAnalysis(theMap, svgExplore)
 {
+	// cache to store rendered similarity matrices
+	this.cache = d3.map();
+
 	// store reference to the map
 	this.map = theMap;
 	this.svgExplore = svgExplore;
@@ -120,7 +123,6 @@ function GridAnalysis(theMap, svgExplore)
 
 		activateButtons(buttonCallbacks);
 
-		
 	})(this);
 }
 
@@ -200,7 +202,8 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 	}
 
 	// store data in a JSON object
-	this.analysisRequest = {
+	this.analysisRequest = 
+	{
 		// query type, for now we'll aggregate crime counts over grid
 		query: 'aggregateCrimeCountOverGrid',
 
@@ -210,9 +213,6 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 		cellOffset: cellOffset,
 		gridCols: cols,
 		gridRows: rows,
-
-		// for now, we'll concern ourselves with year 2014
-		limitYear: 2014
 	};
 }
 
@@ -298,7 +298,7 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 				}
 				else
 				{
-					console.log("Older results.");
+					//console.log("Older results.");
 				}
 			},
 
@@ -351,7 +351,17 @@ GridAnalysis.prototype.data_ready = function()
 	// clustering and render similarity matrix
 	this.clustering = new Clustering(analysisResults.distanceMatrix);
 	var clustering = this.clustering;
-	if (analysisResults.hclusters) {
+	var cacheKey = this.getRequestKey();
+	var cached = this.cache.get(cacheKey);
+
+	if (cached)
+	{
+		// already have a cached version
+		console.log("* hclustering and matrix view found in cache.")
+		clustering.setHierarchicalClusters(cached.clusteringResults);
+	}
+	else if (analysisResults.hclusters) 
+	{
 		// hierarchical clustering already done by server
 		clustering.setHierarchicalClusters( analysisResults.hclusters )
 	}
@@ -361,13 +371,24 @@ GridAnalysis.prototype.data_ready = function()
 	}
 
 	// render matrix
-	this.renderSimMatrix(
-	{
+	var clusteringResults = {
 		simMatrix: 	clustering.getClusteredSimMatrix(),	// similarity matrix
 		clusters: 	clustering.getHClusters(),			// clusters
+		hclusters:  clustering.getHClusters(),
 		data2ij: 	clustering.get_data2ij(),			// indices
-		ij2data: 	clustering.get_ij2data()
-	});
+		ij2data: 	clustering.get_ij2data(),
+		canvas:  	cached ? cached.canvas : undefined
+	};
+	this.renderSimMatrix(clusteringResults);
+
+	// store in cache, if no already cached
+	if (!cached)
+	{
+		this.cache.set(cacheKey, {
+			canvas: 				this.offscreenCanvas,
+			clusteringResults: 		clusteringResults
+		});
+	}
 
 	// MDS analysis
 	this.drawMDS();
@@ -498,27 +519,51 @@ function drawTimeseries(timeseries, group)
 
 GridAnalysis.prototype.drawMDS = function()
 {
-	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
-	{
-		// async MDS analysis
-		var q = queue();
-		q.defer(function(_callback) 
-		{
-			var startTime = new Date();
-			mds.plotMDS(matrix, tsIndex, dimensions, mdsPositions, grid);
-			var processTime = (new Date) - startTime;
-			console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
-			_callback(null);
-		});
+	var startTime = new Date();
 
-	})(
-		this.mds, 
+	// draw the MDS visualization
+	this.mds.plotMDS(
 		this.analysisResults.distanceMatrix,
-		this.analysisResults.tsIndex,
-		2,
-		this.analysisResults.mdsPositions,
-		this
+		this.analysisResults.tsIndex, 
+		2, 
+		this.analysisResults.mdsPositions, this
 	);
+
+	// measure time needed for MDS
+	var processTime = (new Date) - startTime;
+	if (!this.analysisResults.mdsPositions) {
+		console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
+	}
+}
+
+GridAnalysis.prototype.getRequestKey = function()
+{
+	if (this.analysisRequest)
+	{
+		var query = this.analysisRequest;
+		var theKey = "";
+
+		if (query.signalAggregate) {
+			theKey += query.signalAggregate + "_";
+		}
+
+		if (query.limitYear) {
+			theKey += query.limitYear + "_";
+		}
+
+		if (query.yearRange) {
+			theKey += query.yearRange[0] + "_" + query.yearRange[1] + "_";
+		}
+
+		if (query.crimeType) {
+			theKey += query.crimeType;
+		}
+		return theKey;
+	}
+	else
+	{
+		return null;
+	}
 }
 
 GridAnalysis.prototype.drawSmallMultipatterns = function()
@@ -546,49 +591,57 @@ GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 	this.simMatrix = new SimilarityMatrix(matrixGroup);
 	this.simMatrix.setMatrixVisibility(false);
 	this.simMatrix.setDendogramVisibility(true);
-	//this.simMatrix.dendogramLimit = 3;
+	
+	// limit how deep the dendogram goes
+	// this.simMatrix.dendogramLimit = 3;
 			
-	// update the similarity matrix
-	this.simMatrix.updateMatrixWithResults(hcluster)
-
-	// render queue
-	var canvasQ = queue();
-	
-	if (!this.offscreenCanvas) {
-		// create an offscreen-canvas
-		this.offscreenCanvas = document.createElement('canvas');
-		this.offscreenCanvas.width = this.onscreenCanvas.width;
-		this.offscreenCanvas.height = this.onscreenCanvas.height;
-	}		
-	
-	(function(onscreenCanvas, offscreenCanvas, simMatrix, grid) 
+	// set callbacks
+	(function(grid, simMatrix) 
 	{
-		// render the matrix
-		canvasQ.defer(function(_callback) 
-		{
-			var startTime = new Date();
-			simMatrix.drawToCanvas( offscreenCanvas, null, GridAnalysis.FULL_MATRIX );
-
-			// measure time
-			var endTime = new Date();
-			var processTime = (endTime.getTime() - startTime.getTime())/1000;
-			console.log("Matrix rendering took: " + processTime.toFixed(1) + " seconds.");
-			onscreenCanvas.getContext("2d").drawImage(offscreenCanvas, 0, 0);
-			_callback(null);
-		});
-
 		// create cluster brush callbacks
-		simMatrix.setClusterBrushCallback(
+		grid.simMatrix.setClusterBrushCallback(
 			function(cluster) { grid.brushCluster(cluster); },
 			function(cluster) { grid.unbrushCluster(cluster); }
 		);
 
 		// a callback when clusters are double clicked
-		simMatrix.setClusterDblClickCallback( function(cluster) {
+		grid.simMatrix.setClusterDblClickCallback( function(cluster) {
 			grid.makeClusterSelection( cluster );
 		})
 
-	})(this.onscreenCanvas, this.offscreenCanvas, this.simMatrix, this)
+	})(this);
+
+	// update similarity matrix
+	this.simMatrix.updateMatrixWithResults(hcluster);
+
+	if (hcluster.canvas)
+	{
+		this.offscreenCanvas = hcluster.canvas;		
+	}
+	else
+	{
+
+		// update the similarity matrix
+		this.simMatrix.updateMatrixWithResults(hcluster)
+
+		// create an offscreen-canvas
+		this.offscreenCanvas = document.createElement('canvas');
+		this.offscreenCanvas.width = this.onscreenCanvas.width;
+		this.offscreenCanvas.height = this.onscreenCanvas.height;
+		
+		var startTime = new Date();
+		
+		// render the matrix to offscreenCanvas
+		this.simMatrix.drawToCanvas( this.offscreenCanvas, null, GridAnalysis.FULL_MATRIX );
+
+		// measure time needed to render
+		var endTime = new Date();
+		var processTime = (endTime.getTime() - startTime.getTime())/1000;
+		console.log("Matrix rendering took: " + processTime.toFixed(1) + " seconds.");		
+	}		
+
+	// draw actual image on screen
+	this.onscreenCanvas.getContext("2d").drawImage(this.offscreenCanvas, 0, 0);
 }
 
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 

@@ -69,7 +69,12 @@ Clustering.prototype.setHierarchicalClusters = function(config)
 	this.hclusters = config.hclusters;
 	this.data2ij = config.data2ij;
 	this.ij2data = config.ij2data;
-	this.makeClusteredSimMatrix();
+	if (config.simMatrix) {
+		this.clusteredMatrix = config.simMatrix;
+	}
+	else {
+		this.makeClusteredSimMatrix();
+	}
 }
 
 /* Hierarchical clustering */
