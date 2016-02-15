@@ -55,6 +55,9 @@ module.exports = {
 							// yay, we have previous results
 							callback(data.results);
 							
+							// close database
+							db.close();
+							
 							// store them into memory cache
 							if (!cache.get(queryHash)) {
 								cache.set(queryHash, data.results);
@@ -69,6 +72,9 @@ module.exports = {
 							executeAndCompile(db.collection('crimes'), mongoQuery.N, mongoQuery.stages, query, 
 								function (data, sums, total, listOfSeries)
 								{	
+									// close database connection
+									db.close();
+
 									// perform analysis
 									var analysis = new Analysis(data, sums, total / listOfSeries.length, listOfSeries);
 										
@@ -96,11 +102,17 @@ module.exports = {
 									// store analyses into database
 									query.grid = undefined;
 									query.results = results;
-									db.collection('analyses').insertOne(query, function(err, result) 
+
+									(function(resultToStore)
 									{
-										assert.equal(err, null);
-										db.close();
-									});
+										connectToDB(function(dbConn) {
+											dbConn.collection('analyses').insertOne(resultToStore, function(err, result) 
+											{
+												assert.equal(err, null);
+												dbConn.close();
+											});
+										});
+									})(query);
 								}
 							);
 						}

@@ -243,7 +243,7 @@
 		<div id="sliderYearlyRange" style="margin-top: 5px; margin-bottom: 7px; width: 120px; height: 10px"></div>
 
 		<form  id="signalForm">		
-			<b>time series</b>
+			<b>time series</b><br>
 			<input value="yearly" name="signalAggregate" id="radioWarpYearly" type="radio">Year (daily)<br>
 			<input value="weekly" checked name="signalAggregate" id="radioWarpWeekly" type="radio">Week (hourly)<br>
 			<input value="daily" name="signalAggregate" id="radioWarpDaily" type="radio">Day (30 min)<br>
@@ -351,7 +351,7 @@
 			// make a slider for grid resolution
 			$("#sliderGridResolution").slider({
 				range: false,
-				min: 5, max: 130,
+				min: 5, max: 55, /* used to be 130 */
 				value: GRID_LINE_COUNT,
 				step: 10,
 				change: function( event, ui ) {

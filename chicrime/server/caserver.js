@@ -61,7 +61,9 @@ http.createServer(function(req, res) {
 										crimeType:  		jsonRequest.crimeType
 									};
 
-									res.write(JSON.stringify(results));
+									var strResults = JSON.stringify(results);
+									console.log("\tData size: " + strResults.length);
+									res.write(strResults);
 									res.end();
 								});
 							})(jsonRequest);
