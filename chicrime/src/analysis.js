@@ -95,6 +95,7 @@ function GridAnalysis(theMap, svgExplore)
 				id: "imgShowMDS", 
 				callback: function() {
 					thisGrid.switchMDSPanel(SHOW_MDS);
+					toggleButton(d3.select(this), ["imgShowSmallMultipatterns"]);
 				}
 			},
 			
@@ -109,6 +110,8 @@ function GridAnalysis(theMap, svgExplore)
 				id: "imgShowSmallMultipatterns", 
 				callback: function() {
 					thisGrid.switchMDSPanel(SHOW_SMALL_MULTIPATTERNS);
+					toggleButton(d3.select(this), ["imgShowMDS"]);
+
 				}
 			},
 
@@ -122,6 +125,7 @@ function GridAnalysis(theMap, svgExplore)
 		];
 
 		activateButtons(buttonCallbacks);
+		toggleButton("imgShowMDS");
 
 	})(this);
 }

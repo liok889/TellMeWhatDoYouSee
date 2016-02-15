@@ -113,3 +113,15 @@ function getCoords(elem) { // crossbrowser version
 
     return { top: Math.round(top), left: Math.round(left) };
 }
+
+function toggleButton(on, offList)
+{
+  var on_selection = (typeof on === "string" ? d3.select("#" + on) : on);
+  on_selection.style("background-color", '#fff5cc');
+  if (offList) {
+    for (var i=0, N=offList.length; i<N; i++) {
+      var off_selection = (typeof offList[i] === "string" ? d3.select("#" + offList[i]) : offList[i]);
+      off_selection.style("background-color", "");
+    }
+  }
+}

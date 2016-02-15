@@ -249,24 +249,46 @@ SignalVis.prototype.init = function()
 				});
 			*/
 
-			var buttons = [
-				{
-					id: "imgButtonTrends",
-					asset: "assets/multiple.svg",
-					callback: function() { switchMode(SIGNAL_INDIVIDUAL); }
-				},
-				{
-					id: "imgButtonDiff",
-					asset: "assets/compare.svg",
-					callback: function() { switchMode(SIGNAL_DIFF); },
-				},
-				{
-					id: "imgButtonEdit",
-					asset: "assets/edit.svg",
-					callback: function() { switchMode(SIGNAL_EDIT); },
-					dblCallback: function() { thisSignalVis.clearEdit(); }
-				}
-			];
+			var buttons = (function(signalVis) {
+				return [
+					{
+						id: "imgButtonTrends",
+						asset: "assets/multiple.svg",
+						callback: function() { 
+							switchMode(SIGNAL_INDIVIDUAL); 
+							toggleButton("imgButtonTrends" + '_' + signalVis.id, [
+								"imgButtonDiff_" + signalVis.id,
+								"imgButtonEdit_" + signalVis.id
+							]);
+						}
+					},
+					{
+						id: "imgButtonDiff",
+						asset: "assets/compare.svg",
+						callback: function() { 
+							switchMode(SIGNAL_DIFF); 
+							toggleButton("imgButtonDiff" + '_' + signalVis.id, [
+								"imgButtonTrends_" + signalVis.id,
+								"imgButtonEdit_" + signalVis.id
+							]);
+						},
+					},
+					{
+						id: "imgButtonEdit",
+						asset: "assets/edit.svg",
+						callback: function() { 
+							switchMode(SIGNAL_EDIT); 
+							toggleButton("imgButtonEdit" + '_' + signalVis.id, [
+								"imgButtonTrends_" + signalVis.id,
+								"imgButtonDiff_" + signalVis.id
+							]);
+						},
+						dblCallback: function() { 
+							thisSignalVis.clearEdit(); 
+
+						}
+					}
+			];})(thisSignalVis);
 
 			for (var i=0, N=buttons.length; i<N; i++) {
 				var button = buttons[i];
@@ -281,6 +303,7 @@ SignalVis.prototype.init = function()
 				button.id = button.id + "_" + thisSignalVis.id;
 			}
 			activateButtons(buttons);
+			toggleButton(buttons[0].id, [ buttons[1].id, buttons[2].id ]);
 
 			function switchMode(newMode) 
 			{
