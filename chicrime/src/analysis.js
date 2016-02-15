@@ -2,28 +2,33 @@
  * Grid-based analysis
  * ============================================
  */
-
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
+var SHOW_MDS = 1;
+var SHOW_SMALL_MULTIPATTERNS = 2;
+
 function GridAnalysis(theMap, svgExplore)
 {
+	// cache to store rendered similarity matrices
+	this.cache = d3.map();
+
 	// store reference to the map
 	this.map = theMap;
 	this.svgExplore = svgExplore;
 
 	// create a selection object
-	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2);
+	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8);
 	var yOffset = ClusterSelector.RECT_OFFSET + 12;
 	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
 
 	// add exploration pane
+	var exploreOffset = getCoords(this.svgExplore.node());
 	var gExplore = this.svgExplore.append("g");
-	this.explore = new Explore(gExplore);
+	this.explore = new Explore(gExplore, {xOffset: exploreOffset.left, yOffset: exploreOffset.top});
 
-
-	// initialize callbacks 
+	// initialize callbacks for explore pane
 	(function(grid) 
 	{
 		grid.selector.setSelectionBrushCallback(function(ids) {
@@ -52,7 +57,101 @@ function GridAnalysis(theMap, svgExplore)
 		);
 	})(this);
 
+	// create MDS
+	var svgMDS = d3.select("#svgMDS"); var w = +svgMDS.attr("width"), h = +svgMDS.attr("height");
+	var MDSGroup = svgMDS.append("g")
+		.attr("class", "MDSGroup");
 
+	this.mds = new MDS(
+		MDSGroup,
+		w, h
+	);
+	(function(thisGrid) {
+		thisGrid.mds.setBubbleBrushCallback(function(members) 
+		{
+			thisGrid.brushSelectionMembers(members);
+		})
+	})(this);
+
+	// link MDS with selector
+	this.mds.setColorMap( this.selector.getColorMap() );
+	this.selector.setMDS(this.mds);
+
+	// create Small-MultiPatterns ()
+	var groupSmallMultipatterns = svgMDS.append("g").attr("class", "groupSmallMultipatterns");
+	this.smallMultipatterns = new PatternVis(
+		this.mds,
+		groupSmallMultipatterns,
+		w, h
+	);
+
+	// set MDS panel mode
+	this.mdsView = SHOW_MDS;
+
+	// buttons to switch MDS view form MDS points to Small-Multipatterns
+	(function(thisGrid) {
+		var buttonCallbacks = [
+			{
+				id: "imgShowMDS", 
+				callback: function() {
+					thisGrid.switchMDSPanel(SHOW_MDS);
+					toggleButton(d3.select(this), ["imgShowSmallMultipatterns"]);
+				}
+			},
+			
+			{
+				id: "imgShowClusters", 
+				callback: function() {
+					thisGrid.kMedoids();
+				}
+			},
+
+			{
+				id: "imgShowSmallMultipatterns", 
+				callback: function() {
+					thisGrid.switchMDSPanel(SHOW_SMALL_MULTIPATTERNS);
+					toggleButton(d3.select(this), ["imgShowMDS"]);
+
+				}
+			},
+
+			{
+				id: "imgAddSelection", 
+				callback: function() {
+					var brushedIDs = thisGrid.mds.getBrushedIDs();
+					thisGrid.makeBrushSelection(brushedIDs);
+				}
+			}
+		];
+
+		activateButtons(buttonCallbacks);
+		toggleButton("imgShowMDS");
+
+	})(this);
+}
+
+GridAnalysis.prototype.switchMDSPanel = function(view)
+{
+
+	var svg = d3.select("#svgMDS");
+	if (!view) {
+		view = this.mdsView;
+	}
+
+	switch (view)
+	{
+	case SHOW_MDS:
+		this.mds.setVisibility(true);
+		this.smallMultipatterns.setVisibility(false);
+
+		break;
+
+	case SHOW_SMALL_MULTIPATTERNS:
+		this.mds.setVisibility(false);
+		this.smallMultipatterns.setVisibility(true);
+
+		break;
+	}
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -107,7 +206,8 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 	}
 
 	// store data in a JSON object
-	this.analysisRequest = {
+	this.analysisRequest = 
+	{
 		// query type, for now we'll aggregate crime counts over grid
 		query: 'aggregateCrimeCountOverGrid',
 
@@ -117,9 +217,6 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 		cellOffset: cellOffset,
 		gridCols: cols,
 		gridRows: rows,
-
-		// for now, we'll concern ourselves with year 2014
-		limitYear: 2014
 	};
 }
 
@@ -139,14 +236,23 @@ GridAnalysis.prototype.setSignalAggregate = function(signalAggregate)
 	this.analysisRequest.signalAggregate = signalAggregate;
 }
 
+GridAnalysis.prototype.setSignalFilter = function(filters)
+{
+	for (var i=0, N=filters.length; i<N; i++) {
+		var filter = filters[i];
+		this.analysisRequest[ filter.filter ] = filter.value;
+	}
+}
+
 GridAnalysis.prototype.getAnalysisResults = function() {
 	return this.analysisResults;
 }
 
-GridAnalysis.prototype.resetView = function(aggregate) 
+GridAnalysis.prototype.resetView = function() 
 {
 	this.selector.clearAll();
-	this.explore.clearAll(aggregate);
+	this.explore.clearAll(this.analysisRequest.signalAggregate);
+	this.smallMultipatterns.clearAll();
 }
 
 // send the analysis reuest as a JSON request
@@ -162,52 +268,177 @@ GridAnalysis.prototype.sendRequest = function(_callback)
 			data: JSON.stringify(jsonRequest),
 			success: function(response, textStatus, xhr) 
 			{
-				// reset the view
-				gridAnalysis.resetView( jsonRequest.signalAggregate );
-
 				// parse the JSON reponse we received
-				jsonResponse = JSON.parse(response);
-				gridAnalysis.analysisResults = jsonResponse;
+				var results = JSON.parse(response)
+				var received = results.originalQuery;
+				var expected = gridAnalysis.analysisRequest;
 
-				// ma∂ke a proper (complete) distance matrix from
-				// the similarity matrix we received
-				gridAnalysis.analysisResults.distanceMatrix = symmetrizeSimMatrix(gridAnalysis.analysisResults.simMatrix);
+				// only react to latest data
+				if (received !== undefined &&
+					received.signalAggregate 	=== expected.signalAggregate &&
+					received.limitYear 			=== expected.limitYear &&
+					(
+						(received.crimeType		=== expected.crimeType) ||
+						(Array.isArray(received.crimeType) && Array.isArray(expected.crimeType))
+					) &&
+					(
+						(Array.isArray(received.yearRange) && Array.isArray(expected.yearRange) &&
+						received.yearRange[0] == expected.yearRange[0] && 
+						received.yearRange[1] == expected.yearRange[1]) ||
+						(received.yearRange === expected.yearRange)
+					)
+				) {
 
-				// make an index to translate form row,col to id
-				ij2index = [];
-				index2ij = [];
+					// store results
+					gridAnalysis.analysisResults = results;
 
-				// loop through all IDs
-				for (var i=0, len = jsonResponse.tsIndex.length; i < len; i++) 
-				{
-					var index = jsonResponse.tsIndex[i];
-					var r = index[0];
-					var c = index[1];
+					// data ready
+					gridAnalysis.data_ready();
 
-					if (!ij2index[r]) 
-					{
-						ij2index[r] = [];
+					// callback to UI
+					if (callback) {
+						callback(true);
 					}
-					ij2index[r][c] = i;
-					index2ij.push([r, c]);
 				}
-				gridAnalysis.ij2index = ij2index;
-				gridAnalysis.index2ij = index2ij;
-
-				// make a callback
-				if (callback) callback(jsonResponse);
+				else
+				{
+					//console.log("Older results.");
+				}
 			},
 
 			error: function(xhr, textStatus, errorThrown) {
 				console.error("Error with Ajax GridAnalysis: " + textStatus);
+				if (callback) {
+					callback(false);
+				}
 			} 
 		})
 	})(Date.now(), this.analysisRequest, this, _callback)
 };
 
+GridAnalysis.prototype.data_ready = function()
+{
+	var analysisResults = this.analysisResults;
+	analysisResults.distanceMatrix = symmetrizeSimMatrix(this.analysisResults.simMatrix);
+	
+	// make an index to translate form geocoordinate to timeseries index
+	var ij2index = [];
+	var index2ij = [];
+
+	// loop through all IDs
+	for (var i=0, len = analysisResults.tsIndex.length; i < len; i++) 
+	{
+		var index = analysisResults.tsIndex[i];
+		var r = index[0];
+		var c = index[1];
+
+		if (!ij2index[r]) 
+		{
+			ij2index[r] = [];
+		}
+		ij2index[r][c] = i;
+		index2ij.push([r, c]);
+	}
+	
+	this.ij2index = ij2index;
+	this.index2ij = index2ij;
+
+	// reset the view
+	this.resetView();
+	
+	// make heatmap
+	this.makeHeatmap(
+		analysisResults.aggregate, 		// aggregate crime couts for each cell
+		analysisResults.timeseries 		// crime time series for each cell
+	);
+
+	// clustering and render similarity matrix
+	this.clustering = new Clustering(analysisResults.distanceMatrix);
+	var clustering = this.clustering;
+	var cacheKey = this.getRequestKey();
+	var cached = this.cache.get(cacheKey);
+
+	if (cached)
+	{
+		// already have a cached version
+		console.log("* hclustering and matrix view found in cache.")
+		clustering.setHierarchicalClusters(cached.clusteringResults);
+	}
+	else if (analysisResults.hclusters) 
+	{
+		// hierarchical clustering already done by server
+		clustering.setHierarchicalClusters( analysisResults.hclusters )
+	}
+	else {
+		// do clustering
+		clustering.hierarchical();
+	}
+
+	// render matrix
+	var clusteringResults = {
+		simMatrix: 	clustering.getClusteredSimMatrix(),	// similarity matrix
+		clusters: 	clustering.getHClusters(),			// clusters
+		hclusters:  clustering.getHClusters(),
+		data2ij: 	clustering.get_data2ij(),			// indices
+		ij2data: 	clustering.get_ij2data(),
+		canvas:  	cached ? cached.canvas : undefined
+	};
+	this.renderSimMatrix(clusteringResults);
+
+	// store in cache, if no already cached
+	if (!cached)
+	{
+		this.cache.set(cacheKey, {
+			canvas: 				this.offscreenCanvas,
+			clusteringResults: 		clusteringResults
+		});
+	}
+
+	// MDS analysis
+	this.drawMDS();
+
+	// Small-Multipatterns
+	this.smallMultipatterns.makeSimpleLayout(7, 6);
+
+	// activate view
+	this.switchMDSPanel();
+}
+
+GridAnalysis.prototype.kMedoids = function()
+{
+	// calculate K mediuds
+	this.kClusters = this.clustering.kMedoids(K_CLUSTER_COUNT);
+
+	// clear all previous selections
+	this.selector.clearAll();
+
+	// assign colors to clusters, and make new selections from them
+	var colorSets = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999'];
+	for (var i=0, K=this.kClusters.length; i<K; i++) 
+	{
+		this.kClusters[i].color = colorSets[ Math.min(i, colorSets.length-1) ];
+		this.makeBrushSelection( this.kClusters[i].members, /*this.kClusters[i].color*/ null );
+	}
+
+	this.mds.clearBubbleSets();
+
+	// visualize the results as bubble groups
+	//this.mds.drawBubbleSets(this.kClusters);
+}
+
+GridAnalysis.prototype.lookupCell = function(tsIndex)
+{
+	return this.index2ij[tsIndex];
+}
+
+GridAnalysis.prototype.getTimeseriesCount = function()
+{
+	return this.analysisResults.tsIndex.length;
+}
+
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
-	var cell = this.analysisResults.tsIndex[index];
+	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
 	return this.getGeoRect(cell).getTimeseries();
 }
 
@@ -288,92 +519,72 @@ function drawTimeseries(timeseries, group)
 		.attr("stroke", "black")
 		.style("stroke-width", "1px")
 		.style("fill", "none");
-/*		.transition()
-		.attr("d", lineFunction(data)); */
 }
 
-
-GridAnalysis.prototype.drawMDS = function(svg, width, height)
+GridAnalysis.prototype.drawMDS = function()
 {
-	// create a new MDS project object
-	if (!this.mds) {
-		this.mds = new MDS(svg);
-		this.mds.setColorMap( this.selector.getColorMap() );
-		this.selector.setMDS(this.mds);
-	}
+	var startTime = new Date();
 
-	(function(mds, matrix, tsIndex, dimensions, mdsPositions, grid) 
-	{
-		// async MDS analysis
-		var q = queue();
-		q.defer(function(_callback) 
-		{
-			var startTime = new Date();
-			mds.plotMDS(matrix, tsIndex, dimensions, mdsPositions, grid);
-			var processTime = (new Date) - startTime;
-			console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
-			_callback(null);
-		});
-
-	})(
-		this.mds, 
+	// draw the MDS visualization
+	this.mds.plotMDS(
 		this.analysisResults.distanceMatrix,
-		this.analysisResults.tsIndex,
-		2,
-		this.analysisResults.mdsPositions,
-		this
+		this.analysisResults.tsIndex, 
+		2, 
+		this.analysisResults.mdsPositions, this
 	);
+
+	// measure time needed for MDS
+	var processTime = (new Date) - startTime;
+	if (!this.analysisResults.mdsPositions) {
+		console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
+	}
 }
 
-GridAnalysis.prototype.hClustering = function()
+GridAnalysis.prototype.getRequestKey = function()
 {
-	// normalize matrix
-	var matrix = this.analysisResults.distanceMatrix;
-	var nMatrix = [];
-
-	// figure extents
-	var maxDistance = -Number.MAX_VALUE;
-	var minDistance = Number.MAX_VALUE;
-
-	for (var i=0, len=matrix.length; i<len; i++) {
-		var row = [];
-		for (var j=0; j<len; j++) {
-			if (i == j) {
-				row.push(0);
-			}
-			else
-			{
-				var v = matrix[i][j];
-				if (maxDistance < v) maxDistance = v;
-				if (minDistance > v) minDistance = v;
-				row.push(v);
-			}
-		}
-		nMatrix.push(row);
-	}
-
-	var diffDistance = maxDistance - minDistance;
-
-	for (var i=0, len=nMatrix.length; i<len; i++) 
+	if (this.analysisRequest)
 	{
-		for (var j=0; j<len; j++) 
-		{
-			// simiarity = 1.0 - distance
-			nMatrix[i][j] = 1.0 - ((nMatrix[i][j]-minDistance) / diffDistance);
-		}
-		nMatrix[i][i] = 1.0;
-	}
+		var query = this.analysisRequest;
+		var theKey = "";
 
+		if (query.signalAggregate) {
+			theKey += query.signalAggregate + "_";
+		}
+
+		if (query.limitYear) {
+			theKey += query.limitYear + "_";
+		}
+
+		if (query.yearRange) {
+			theKey += query.yearRange[0] + "_" + query.yearRange[1] + "_";
+		}
+
+		if (query.crimeType) {
+			theKey += query.crimeType;
+		}
+		return theKey;
+	}
+	else
+	{
+		return null;
+	}
+}
+
+GridAnalysis.prototype.drawSmallMultipatterns = function()
+{
+	this.smallMultipatterns.make
+}
+
+GridAnalysis.prototype.renderSimMatrix = function(hcluster)
+{
 	// set dimensions for matrix elements / dendogram, based on dimensions of the canvas
 	this.onscreenCanvas = document.getElementById('canvasMatrix');
 	var dim = Math.min(+this.onscreenCanvas.width, +this.onscreenCanvas.height);
 	dim -= GridAnalysis.MATRIX_ELEMENT_BRUSH;
 
-	SIMMAT_ELEMENT_SIZE = dim / nMatrix.length;
+	SIMMAT_ELEMENT_SIZE = dim / hcluster.simMatrix.length;
 	SIMMAT_ELEMENT_BORDER = "none";
 	DENDOGRAM_NODE_HEIGHT = 5;
-		//simMatrix.getDendogramDepth() / (d3.select("#svgDendogram").attr("width") - 15);
-		//4*SIMMAT_ELEMENT_SIZE/2 + 1;
 
 	// remove any previous dendogram
 	d3.select("#svgDendogram").selectAll("g.dendogramGroup").remove();
@@ -384,49 +595,57 @@ GridAnalysis.prototype.hClustering = function()
 	this.simMatrix = new SimilarityMatrix(matrixGroup);
 	this.simMatrix.setMatrixVisibility(false);
 	this.simMatrix.setDendogramVisibility(true);
-	//this.simMatrix.dendogramLimit = 3;
+	
+	// limit how deep the dendogram goes
+	// this.simMatrix.dendogramLimit = 3;
 			
-	// update the similarity matrix 
-	this.simMatrix.updateMatrix(nMatrix);
-
-	// render queue
-	var canvasQ = queue();
-	
-	if (!this.offscreenCanvas) {
-		// create an offscreen-canvas
-		this.offscreenCanvas = document.createElement('canvas');
-		this.offscreenCanvas.width = this.onscreenCanvas.width;
-		this.offscreenCanvas.height = this.onscreenCanvas.height;
-	}		
-	
-	(function(onscreenCanvas, offscreenCanvas, simMatrix, grid) 
+	// set callbacks
+	(function(grid, simMatrix) 
 	{
-		// render the matrix
-		canvasQ.defer(function(_callback) 
-		{
-			var startTime = new Date();
-			simMatrix.drawToCanvas( offscreenCanvas, null, GridAnalysis.FULL_MATRIX );
-
-			// measure time
-			var endTime = new Date();
-			var processTime = (endTime.getTime() - startTime.getTime())/1000;
-			console.log("Matrix rendering took: " + processTime.toFixed(1) + " seconds.");
-			onscreenCanvas.getContext("2d").drawImage(offscreenCanvas, 0, 0);
-			_callback(null);
-		});
-
 		// create cluster brush callbacks
-		simMatrix.setClusterBrushCallback(
+		grid.simMatrix.setClusterBrushCallback(
 			function(cluster) { grid.brushCluster(cluster); },
 			function(cluster) { grid.unbrushCluster(cluster); }
 		);
 
 		// a callback when clusters are double clicked
-		simMatrix.setClusterDblClickCallback( function(cluster) {
+		grid.simMatrix.setClusterDblClickCallback( function(cluster) {
 			grid.makeClusterSelection( cluster );
 		})
 
-	})(this.onscreenCanvas, this.offscreenCanvas, this.simMatrix, this)
+	})(this);
+
+	// update similarity matrix
+	this.simMatrix.updateMatrixWithResults(hcluster);
+
+	if (hcluster.canvas)
+	{
+		this.offscreenCanvas = hcluster.canvas;		
+	}
+	else
+	{
+
+		// update the similarity matrix
+		this.simMatrix.updateMatrixWithResults(hcluster)
+
+		// create an offscreen-canvas
+		this.offscreenCanvas = document.createElement('canvas');
+		this.offscreenCanvas.width = this.onscreenCanvas.width;
+		this.offscreenCanvas.height = this.onscreenCanvas.height;
+		
+		var startTime = new Date();
+		
+		// render the matrix to offscreenCanvas
+		this.simMatrix.drawToCanvas( this.offscreenCanvas, null, GridAnalysis.FULL_MATRIX );
+
+		// measure time needed to render
+		var endTime = new Date();
+		var processTime = (endTime.getTime() - startTime.getTime())/1000;
+		console.log("Matrix rendering took: " + processTime.toFixed(1) + " seconds.");		
+	}		
+
+	// draw actual image on screen
+	this.onscreenCanvas.getContext("2d").drawImage(this.offscreenCanvas, 0, 0);
 }
 
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 
@@ -447,7 +666,7 @@ GridAnalysis.prototype.makeClusterSelection = function(cluster)
 	this.selector.newSelection(members);
 }
 
-GridAnalysis.prototype.makeBrushSelection = function(ids)
+GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 {
 	if (ids.length > 0)
 	{
@@ -464,7 +683,7 @@ GridAnalysis.prototype.makeBrushSelection = function(ids)
 				geoRect: geoRect
 			});
 		}
-		this.selector.newSelection(members);
+		this.selector.newSelection(members, ownColor);
 	}
 }
 
@@ -489,7 +708,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 {
 	if (cells && cells.length > 0) {
 
-		highlightMap = d3.map();
+		var highlightMap = d3.map();
 		for (var i = 0, len = cells.length; i < len; i++) {
 			var c = Array.isArray(cells[i]) ? cells[i] : cells[i].getCell();
 			highlightMap.set(c[0] + "_" + c[1], true);
@@ -507,6 +726,68 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 	else {
 		this.heatmapSelection.style("fill-opacity", HEATMAP_OPACITY);
 	}
+}
+
+// given an example (edited) time series, plot similarity to it
+GridAnalysis.prototype.showDistanceToExample = function(example)
+{
+	if (!example) {
+		// no example provided, return display to normal
+		(function(heatmapSelection, colorScale, logScale) 
+		{
+			heatmapSelection.style("fill", function(d) { return colorScale(logScale(d.nValue+1)); });
+		})(this.heatmapSelection, this.colorScale, this.logScale);
+	}
+	else
+	{
+		// calculate the distance of this example to all time series in our dataset
+		var N = this.getTimeseriesCount();
+		var distanceList = [];
+		for (var i=0; i<N; i++) 
+		{
+			var ts = this.getTimeseries(i);
+			var distance = ts.distanceEDR(example);
+			distanceList.push( distance );
+		}
+
+		// plot distance heatmap
+		this.showDistanceHeatmap( distanceList, example.size()*2 );
+	}
+}
+
+GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
+{
+	// figure out min/max in distance list
+	var minD = Number.MAX_VALUE, maxD = -Number.MAX_VALUE;
+	for (var i=0, N=distanceList.length; i<N; i++) {
+		var d=distanceList[i];
+		if (d < minD) {
+			minD = distanceList[i];
+		}
+		if (d > maxD) {
+			maxD = distanceList[i];
+		}
+	}
+	console.log("\tDistance profile: " + minD + ", " + maxD);
+
+
+	// make color scale
+	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
+	//var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
+	var DISTANCE_COLOR = ['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
+
+	var _logScale = d3.scale.log().domain([1, (maxDistance ? maxDistance : maxD)+1]).range([0, 1]);
+	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);
+	
+	(function(ij2index, heatmapSelection, colorScale, logScale, distances) 
+	{
+
+		heatmapSelection.style("fill", function(d) 
+		{
+			var index = ij2index[ d.cell[0] ][ d.cell[1] ];
+			return colorScale( (distances[index] + 0) );
+		})
+	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
 }
 
 GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
@@ -579,9 +860,13 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 	this.geoRectMap = geoRectMap;
 	this.geoRects = geoRects;
 
-	// produce color for the heatmap
+	// make color scales
 	var _logScale = d3.scale.log().domain([minValue+1, maxValue+1]).range([0, 1]);
-	var _colorScale = d3.scale.quantize([0, 1]).range(HEATMAP_COLOR);
+	var _colorScale = d3.scale.quantize().domain([0, 1]).range(HEATMAP_COLOR);
+	
+	// store color scales
+	this.logScale = _logScale;
+	this.colorScale = _colorScale;
 
 	svg.selectAll("g.heatmap").remove();
 	
@@ -590,7 +875,8 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 	(function(svg, colorScale, logScale, heatmapGroup, overlayGroup, grid) 
 	{
-		var selection = heatmapGroup.selectAll("path").data(grid.geoRects).enter().append("path")
+		var selection = heatmapGroup.selectAll("path").data(grid.geoRects);
+		selection.enter().append("path")
 			.attr("id", function(d) {
 				var cell = d.getCell();
 				return "heatmap_cell_" + cell[0] + "_" + cell[1]; 
@@ -654,19 +940,27 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 GridAnalysis.prototype.brushCells = function(cells)
 {
-	var brushedIDs = [];
+	var brushedIDs = [], dataPoints = [];
 	for (var i=0, len=cells.length; i < len; i++)
 	{
 		var cell = cells[i];
-		brushedIDs.push(  this.ij2index[ cell[0] ][ cell[1] ]  );
+		var index = this.ij2index[ cell[0] ][ cell[1] ];
+		brushedIDs.push( index );
+		dataPoints.push({
+			index: index,
+			timeseries: this.getTimeseries(index)
+		});
+
 	}
+
+	// brush explore pane
+	this.explore.brushDataPoints( dataPoints );
 
 	// brush similarity matrix as well
 	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
 
 	// brush MDS plot
 	this.mds.brushPoints(brushedIDs);
-
 }
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
@@ -780,24 +1074,11 @@ function symmetrizeSimMatrix(matrix)
 		matrix[i][i] = 0;
 		for (var j = i+1; j < n; j++) 
 		{
-			matrix[j][i] *= -1;
-			matrix[i][j] = matrix[j][i];
+			var e = Math.abs(matrix[j][i]);
+			matrix[j][i] = e;
+			matrix[i][j] = e;
 		}
 	}
 	return matrix;
-}
-
-function testSymmetry(matrix) {
-
-	for (var i=0, len=matrix.length; i<len; i++) {
-		for (var j=0; j < i; j++) {
-			if (matrix[i][j] !== matrix[j][i])
-			{
-				console.error("** MATRIX not symmetric at " + i + " x " + j);
-				return false;
-			}
-		}
-	}
-	return true;
 }
 

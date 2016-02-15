@@ -48,10 +48,25 @@ http.createServer(function(req, res) {
 						case 'aggregateCrimeCountOverGrid':
 							
 							// aggregate crime count over grid
-							crimesQuery.aggregateCrimeCountOverGrid(jsonRequest, function(results) {
-								res.write(JSON.stringify(results));
-								res.end();
-							});
+							(function (jsonRequest) {
+								crimesQuery.aggregateCrimeCountOverGrid(jsonRequest, function(results) 
+								{
+									
+									// tag information about original query
+									results.originalQuery = 
+									{
+										signalAggregate: 	jsonRequest.signalAggregate,
+										limitYear: 			jsonRequest.limitYear,
+										yearRange: 			jsonRequest.yearRange,
+										crimeType:  		jsonRequest.crimeType
+									};
+
+									var strResults = JSON.stringify(results);
+									console.log("\tData size: " + strResults.length);
+									res.write(strResults);
+									res.end();
+								});
+							})(jsonRequest);
 							break;
 					}
 

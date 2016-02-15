@@ -5,11 +5,11 @@
  */
 
 var SELECTION_SERIAL = 1;
-function Selection(color, members, avgTimeseries, selector)
+function Selection(color, members, selector)
 {
 	this.selectionID = SELECTION_SERIAL++;
 	this.members = members;
-	this.avgTimeseries = avgTimeseries;
+	this.avgTimeseries = calcAvgTimeseries(members);
 	this.parentSelector = selector;
 	this.color = color;
 }
@@ -45,15 +45,12 @@ Selection.prototype.updateMemberList = function(newMembers)
 	if (!this.pathG) {
 		this.pathG = this.content.append("g").attr("transform", "translate(" + PAD + "," + PAD + ")");
 		this.pathG.append("path")
-			.attr("class", "timeseriesSelection")
-			.attr("d", pathGenerator(this.avgTimeseries.getSeries()))
-			.attr("stroke", "black")
-			.attr("stroke-width", "1px")
-			.attr("fill", "none");
+			.attr("class", "selectionCurve")
+			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 	else
 	{
-		this.pathG.selectAll("path.timeseriesSelection").transition()
+		this.pathG.selectAll("path.selectionCurve").transition()
 			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
 };
@@ -72,6 +69,7 @@ Selection.prototype.populateSelection = function(g)
 		.attr("width", ClusterSelector.RECT_W)
 		.attr("height", ClusterSelector.RECT_H)
 		.attr("fill", this.color || ClusterSelector.LAST_COLOR)
+		.attr("fill-opacity", "0.6")
 		.attr("rx", 3.5)
 		.attr("ry", 3.5)
 		.attr("stroke", "");
@@ -104,7 +102,8 @@ Selection.prototype.populateSelection = function(g)
 			.attr("x", imgX)
 			.attr("y", 4 + imgH)
 			.attr("width", imgH)
-			.attr("height", imgH);
+			.attr("height", imgH)
+			.style("visibility", "hidden");
 
 		thisSelection.content
 			.on("mouseover", function() 
@@ -226,7 +225,7 @@ ClusterSelector.prototype.removeSelection = function(selection)
 		}
 	}
 
-	if (selection.color && selection.color != ClusterSelector.LAST_COLOR) {
+	if (selection.color && selection.color != ClusterSelector.LAST_COLOR && !selection.hasOwnColor) {
 		// return color to available pool of colors
 		ClusterSelector.SELECTION_COLORS.push(selection.color);
 	}
@@ -275,7 +274,8 @@ ClusterSelector.prototype.updateSelections = function()
 		var members = selection.getMembers();
 		for (var j=0, K=members.length; j<K; j++) 
 		{
-			colorMap.set( members[j].id, selection.color );
+			var interpolator = d3.interpolate( selection.color, "#ffffff" );
+			colorMap.set( members[j].id, selection.color == ClusterSelector.LAST_COLOR ? selection.color : interpolator(0.25) );
 
 		}
 	}
@@ -311,7 +311,7 @@ ClusterSelector.prototype.getSelectionIndex = function(selection)
 	return null;
 }
 
-ClusterSelector.prototype.newSelection = function(members)
+ClusterSelector.prototype.newSelection = function(members, ownColor)
 {
 	var modifiedSelections = [];
 	var _newMap = mapifyMemberList(members);
@@ -371,7 +371,7 @@ ClusterSelector.prototype.newSelection = function(members)
 			{
 				// cluster is now empty, remove it
 				this.selections.splice(i, 1);
-				if (s.color && s.color != ClusterSelector.LAST_COLOR) 
+				if (s.color && s.color != ClusterSelector.LAST_COLOR && !s.hasOwnColor) 
 				{
 					// return color to available pool of colors
 					ClusterSelector.SELECTION_COLORS.push(s.color);
@@ -381,20 +381,25 @@ ClusterSelector.prototype.newSelection = function(members)
 		}
 	}
 
-	// average the time series
-	var avgTimeseries = calcAvgTimeseries(members);
-
 	// add a selection to the cluster group
-	var color = null;
-	if (ClusterSelector.SELECTION_COLORS.length > 0) {
-		color = ClusterSelector.SELECTION_COLORS.pop();
+	var hasOwnColor = false;
+	var color = ownColor;
+	if (color)
+	{
+		hasOwn = true;
 	}
-	else {
-		color = ClusterSelector.LAST_COLOR;
+	else 
+	{
+		if (ClusterSelector.SELECTION_COLORS.length > 0) {
+			color = ClusterSelector.SELECTION_COLORS.pop();
+		}
+		else {
+			color = ClusterSelector.LAST_COLOR;
+		}
 	}
 
 	// add to selection
-	var selection = new Selection(color, members, avgTimeseries, this);
+	var selection = new Selection(color, members, this); selection.hasOwnColor = hasOwnColor
 	this.selections.push( selection );
 
 	// update selections
@@ -404,7 +409,7 @@ ClusterSelector.prototype.newSelection = function(members)
 ClusterSelector.prototype.clearAll = function() 
 {
 	this.selections = [];
-	this.svg.selectAll("g").remove();
+	this.svg.selectAll("g").transition().remove();
 
 	// restore default selection colors
 	ClusterSelector.SELECTION_COLORS = [];
@@ -543,11 +548,13 @@ function calcAvgTimeseries(members)
 // constants
 // ==========
 //ClusterSelector.DEFAULT_COLORS = ['#fbb4ae','#b3cde3','#ccebc5','#decbe4','#fed9a6','#ffffcc','#e5d8bd','#fddaec','#f2f2f2'].reverse();
-ClusterSelector.DEFAULT_COLORS = ['#fb8072','#80b1d3','#fdb462','#8dd3c7', '#bebada','#b3de69','#fccde5','#d9d9d9'].reverse();
+//ClusterSelector.DEFAULT_COLORS = ['#fb8072','#80b1d3','#fdb462','#8dd3c7', '#bebada','#b3de69','#fccde5','#d9d9d9'].reverse();
+ClusterSelector.DEFAULT_COLORS = ['#fdbf6f', '#a6cee3','#b2df8a','#cab2d6','#1f78b4',,'#33a02c','#ff7f00','#6a3d9a', /*'#e31a1c',*/'#b15928'];
+
 ClusterSelector.SELECTION_COLORS = null;
-ClusterSelector.LAST_COLOR = '#8dd3c7';
-ClusterSelector.RECT_W = 140;
-ClusterSelector.RECT_H = 37;
+ClusterSelector.LAST_COLOR = '#d9d9d9';
+ClusterSelector.RECT_W = 120;
+ClusterSelector.RECT_H = 35;
 ClusterSelector.RECT_PAD = 3;
 ClusterSelector.RECT_OFFSET = 2;
 

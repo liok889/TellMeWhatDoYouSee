@@ -7,12 +7,17 @@
 "use strict";
 
 // requires
+var crypto = require('crypto');
+var HashMap = require('hashmap');
 var Analysis = require('./analysis.js');
 var MongoClient = require('mongodb').MongoClient;
 var assert = require('assert');
 
 // constant
 var URL = 'mongodb://localhost:27017/TellMeWhatDoYouSee';
+
+var cache = null;
+var md5Hash = null;
 
 module.exports = {
 
@@ -21,58 +26,100 @@ module.exports = {
 		// remove grid (we don't need that)
 		query.grid = undefined;
 
-		// connect and issue aggreaget query
-		connectToDB(function(db) 
+		// initialize cache if needed
+		if (!cache) {
+			cache = new HashMap();
+		}
+
+		// hash the query and see if it's in the cache
+		var md5Hash = crypto.createHash('md5');
+		var _queryHash = md5Hash.update(JSON.stringify(query)).digest('hex');
+		var cachedResults = cache.get(_queryHash);
+		
+		if (cachedResults)
 		{
-			readPreviousResults(db.collection('analyses'), query, function(data) 
-			{
-				if (data)
+			// callback and return data
+			console.log("* Found in cache.");
+			callback(cachedResults);
+		}
+		else
+		{
+			// connect and issue aggreaget query
+			(function(queryHash, query, callback) { 
+				connectToDB(function(db) 
 				{
-					// yay, we have previous results
-					callback(data.results);
-				}
-				else
-				{
-
-					// construct a MongoDB aggregate query
-					var mongoQuery = constructAggregateQuery(query);
-
-					// perform query and collect results
-					executeAndCompile(db.collection('crimes'), mongoQuery.N, mongoQuery.stages, query, 
-						function (data, sums, total, listOfSeries)
-						{	
-							// perform analysis
-							var analysis = new Analysis(data, sums, total / listOfSeries.length, listOfSeries);
-								
-							analysis.filter();
-							analysis.calcSimilarityMatrix();
-							analysis.projectMDS();
-
-							// collect results
-							var results = {
-								timeseries: 		data,
-								aggregate: 			sums,
-								simMatrix: 			analysis.getSimMatrix(),
-								tsIndex: 			analysis.getTSIndex(),
-								mdsPositions: 		analysis.getMDSPositions()
-							};
-
-							// callback and return data
-							callback(results);
+					readPreviousResults(db.collection('analyses'), query, function(data) 
+					{
+						if (data)
+						{
+							// yay, we have previous results
+							callback(data.results);
 							
-							// store analyses into database
-							query.grid = undefined;
-							query.results = results;
-							db.collection('analyses').insertOne(query, function(err, result) 
-							{
-								assert.equal(err, null);
-								db.close();
-							});
+							// close database
+							db.close();
+							
+							// store them into memory cache
+							if (!cache.get(queryHash)) {
+								cache.set(queryHash, data.results);
+							}
 						}
-					);
-				}
-			});
-		});
+						else
+						{
+							// construct a MongoDB aggregate query
+							var mongoQuery = constructAggregateQuery(query);
+
+							// perform query and collect results
+							executeAndCompile(db.collection('crimes'), mongoQuery.N, mongoQuery.stages, query, 
+								function (data, sums, total, listOfSeries)
+								{	
+									// close database connection
+									db.close();
+
+									// perform analysis
+									var analysis = new Analysis(data, sums, total / listOfSeries.length, listOfSeries);
+										
+									analysis.filter();
+									analysis.calcSimilarityMatrix();
+									analysis.projectMDS();
+
+									// collect results
+									var results = {
+										timeseries: 		data,
+										aggregate: 			sums,
+										simMatrix: 			analysis.getSimMatrix(),
+										tsIndex: 			analysis.getTSIndex(),
+										mdsPositions: 		analysis.getMDSPositions()
+									};
+
+									// callback and return data
+									callback(results);
+
+									// store into memory cache
+									if (!cache.get(queryHash)) {
+										cache.set(queryHash, results);
+									}
+									
+									// store analyses into database
+									query.grid = undefined;
+									query.results = results;
+
+									(function(resultToStore)
+									{
+										connectToDB(function(dbConn) {
+											dbConn.collection('analyses').insertOne(resultToStore, function(err, result) 
+											{
+												assert.equal(err, null);
+												dbConn.close();
+											});
+										});
+									})(query);
+								}
+							);
+						}
+					});
+				});
+			}) (_queryHash, query, callback);
+		}
 	}
 };
 
@@ -166,6 +213,24 @@ function constructAggregateQuery(query)
 		});
 	}
 
+	if (query.crimeType && query.crimeType !== "ALL") 
+	{
+		
+		if (Array.isArray(query.crimeType)) {
+			var OR = [];
+			for (var i=0, len=query.crimeType.length; i<len; i++) {
+				OR.push({"crimeType": query.crimeType[i]});
+			}
+			match.$and.push({$or: OR});
+		}
+		else
+		{
+			match.$and.push({
+				crimeType: query.crimeType
+			});
+		}
+	}
+
 	// lat, lon limit
 	match.$and.push({ lat: {$gte: query.gridMin.lat, $lte: query.gridMax.lat} });
 	match.$and.push({ lon: {$gte: query.gridMin.lon, $lte: query.gridMax.lon} });
@@ -248,6 +313,9 @@ function constructAggregateQuery(query)
 	console.log("Aggregate query:")
 	console.log("\twarp: " + query.signalAggregate);
 	console.log("\trange: " + query.yearRange);
+	if (query.crimeType) {
+		console.log("\tcrime type: " + query.crimeType);
+	}
 
 	return {
 		stages: stages,
