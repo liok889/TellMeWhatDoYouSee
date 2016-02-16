@@ -32,6 +32,13 @@ function getParentElement(element, parent, className)
 	}
 }
 
+function mouseInContainer(coord, containerSelection)
+{
+  var w = +containerSelection.attr("width");
+  var h = +containerSelection.attr("height");
+  console.log("\tw: " + w + ", h: " + h);
+  return (coord[0] >= 0 && coord[0] <= w &&coord[1] >= 0 && coord[1] <= h);
+}
 
 function putNodeOnTop(node)
 {

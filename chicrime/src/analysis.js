@@ -114,6 +114,22 @@ function GridAnalysis(theMap, svgExplore)
 
 				}
 			},
+			{
+				id: "imgMagicSelection",
+				callback: function() 
+				{
+					thisGrid.mds.setSelectionMode(SELECTION_MODE_MAGIC);
+					toggleButton(d3.select(this), ["imgSquareSelection"]);
+				}
+			},
+			{
+				id: "imgSquareSelection",
+				callback: function() 
+				{
+					thisGrid.mds.setSelectionMode(SELECTION_MODE_SQUARE);
+					toggleButton(d3.select(this), ["imgMagicSelection"]);
+				}
+			},
 
 			{
 				id: "imgAddSelection", 
@@ -126,6 +142,7 @@ function GridAnalysis(theMap, svgExplore)
 
 		activateButtons(buttonCallbacks);
 		toggleButton("imgShowMDS");
+		toggleButton("imgSquareSelection");
 
 	})(this);
 }
@@ -540,6 +557,20 @@ GridAnalysis.prototype.drawMDS = function()
 	}
 }
 
+// returns the size (length) of the first time series 
+// (we assume that all series have the same length)
+GridAnalysis.prototype.getTimeseriesSize = function()
+{
+	var timeseries = this.getTimeseries(0);
+	return timeseries.size();
+}
+
+GridAnalysis.prototype.getMaxTimeseriesDistance = function()
+{
+	// max timeseries distance (based on EDR; M+N)
+	return 2*this.getTimeseriesSize();
+}
+
 GridAnalysis.prototype.getRequestKey = function()
 {
 	if (this.analysisRequest)
@@ -562,7 +593,8 @@ GridAnalysis.prototype.getRequestKey = function()
 		if (query.crimeType) {
 			theKey += query.crimeType;
 		}
-		return theKey;
+
+		return theKey + "_" + GRID_LINE_COUNT;
 	}
 	else
 	{
@@ -731,6 +763,8 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 // given an example (edited) time series, plot similarity to it
 GridAnalysis.prototype.showDistanceToExample = function(example)
 {
+	var maxDistance = this.getMaxTimeseriesDistance();
+
 	if (!example) {
 		// no example provided, return display to normal
 		(function(heatmapSelection, colorScale, logScale) 
@@ -751,7 +785,7 @@ GridAnalysis.prototype.showDistanceToExample = function(example)
 		}
 
 		// plot distance heatmap
-		this.showDistanceHeatmap( distanceList, example.size()*2 );
+		this.showDistanceHeatmap( distanceList, maxDistance );
 	}
 }
 
