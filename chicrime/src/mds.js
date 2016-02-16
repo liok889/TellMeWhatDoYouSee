@@ -10,8 +10,14 @@ var MDS_PADDING 				= 20;
 var MDS_DOUBLE_BRUSH_OPACITY	= 0.2;
 var BUBBLE_OPACITY				= 0.15;
 
+// selection modes
 var SELECTION_MODE_SQUARE		= 1;
 var SELECTION_MODE_MAGIC		= 2;
+
+// magic selection, min/max parameters
+var MAX_MAGIC_THRESHOLD = 0.6;
+var MIN_MAGIC_THRESHOLD = 0.0;
+var THRESHOLD_RATE = 0.005 * 0.7;
 
 /* =======================
  * MDSPoint
@@ -61,9 +67,7 @@ function MDS(svg, width, height)
 	// threshold for magic selection
 	this.magicThreshold = 0.15;
 
-	var MAX_MAGIC_THRESHOLD = 0.5;
-	var MIN_MAGIC_THRESHOLD = 0.0;
-	var THRESHOLD_RATE = 0.005;
+
 
 	(function(mds) 
 	{
@@ -80,7 +84,12 @@ function MDS(svg, width, height)
 			if (guideCircle.size() == 0) {
 				guideCircle = mds.svg.append("circle")
 					.attr("class", "guide")
-					.style("pointer-events", "none");
+					.style("pointer-events", "none")
+					.style("fill", "white")
+					.style("stroke", "#555555")
+					.style("fill-opacity", "0.7")
+					.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
 				mds.svg.on("mousemove.circleGuide", function() 
 				{
 					var mouse = d3.mouse(this);
@@ -91,10 +100,8 @@ function MDS(svg, width, height)
 			}
 			guideCircle
 				.attr("r", r)
-				.attr("cx", mouse[0]).attr("cy", mouse[1])
-				.style("fill", "#aaaaaa")
-				.style("stroke", "#555555")
-				.style("fill-opacity", "0.4");
+				.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
 
 			mds.circleDate = new Date();
 
@@ -105,7 +112,7 @@ function MDS(svg, width, height)
 			}
 
 			mds.circleTimeout = setTimeout(function() {
-				mds.svg.select("circle.guide").remove();
+				mds.svg.select("circle.guide").transition().duration(150).attr("r", 0.0001).remove();
 				mds.svg.on("mousemove.circleGuide", null);
 				mds.circleTimeout = undefined;
 			}, 2000);
@@ -132,7 +139,7 @@ function MDS(svg, width, height)
 					mds.magicThreshold = Math.max(MIN_MAGIC_THRESHOLD, mds.magicThreshold - THRESHOLD_RATE);
 					addGuidelineCircle(mouse);
 				}
-				mds.schedulePickMagicPoint(null)
+				mds.pickMagicPoint(null)
 			}
 		});
 
@@ -364,7 +371,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 			.style("fill-opacity", "0.0")
 			.style("stroke", "none")
 			.on("mouseenter", function(d, i) {
-				thisObject.schedulePickMagicPoint(i);
+				thisObject.pickMagicPoint(i);
 			})
 			.on("mouseout", function(d, i) {
 				thisObject.unpickMagicPoint(i);
@@ -386,30 +393,6 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	this.mdsPoints = points;
 }
 
-MDS.prototype.schedulePickMagicPoint = function(index)
-{
-	/*
-	if (this.scheduledPick) 
-	{
-		clearTimeout(this.scheduledPick);
-		this.scheduledPick = undefined;
-	}
-	*/
-	this.pickMagicPoint(index);
-	/*
-	(function(thisObject, i)
-	{
-		// schedule the pick
-		thisObject.scheduledPick = setTimeout(function()
-		{
-			thisObject.pickMagicPoint(i)
-		}, 150);
-	})(this, index)
-	*/
-
-
-
-}
 MDS.prototype.pickMagicPoint = function(i)
 {
 	var MAX_GEOM_DISTANCE = null; //Math.pow(100,2);
@@ -487,12 +470,7 @@ MDS.prototype.pickMagicPoint = function(i)
 }
 
 MDS.prototype.unpickMagicPoint = function(i)
-{
-	if (this.scheduledPick) {
-		clearTimeout(this.scheduledPick);
-		this.scheduledPick = undefined;
-	}
-	
+{	
 	if (this.selectionMode != SELECTION_MODE_MAGIC) 
 	{
 		return;

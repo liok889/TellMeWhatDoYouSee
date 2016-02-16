@@ -304,6 +304,7 @@
 
 		// variables controllable by the UI
 		var GRID_LINE_COUNT = 55;
+		var MIN_GRID_LINE_COUNT = 5, MAX_GRID_LINE_COUNT = 55;
 		var GRID_OVERLAP = 0;
 		var SHOW_GRID = false;
 		var SHOW_COMMUNITIES = false;
@@ -360,7 +361,8 @@
 			// make a slider for grid resolution
 			$("#sliderGridResolution").slider({
 				range: false,
-				min: 5, max: 55, /* used to be 130 */
+				min: MIN_GRID_LINE_COUNT, 
+				max: MAX_GRID_LINE_COUNT, /* used to be 130 */
 				value: GRID_LINE_COUNT,
 				step: 10,
 				change: function( event, ui ) {
@@ -380,18 +382,6 @@
 				}
 			});
 			$("#labelClusterCount").html("clusters: " + K_CLUSTER_COUNT);
-
-			/*
-			$("#sliderGridOverlap").slider({
-				range: false,
-				min: 0, max: .8, step: .01,
-				value: GRID_OVERLAP ,
-				change: function( event, ui ) {
-					GRID_OVERLAP = ui.value
-					projectGrid();
-				}
-			});
-			*/
 
 			// yearly range
 			$("#sliderYearlyRange").slider({
@@ -529,6 +519,7 @@
 				.attr("x2", function(d) { return d; });
 
 			// move map to default center / zoom-level
+			/*
 			var center = theMap.getCenter();
 			var zoom = theMap.getZoom();
 			theMap.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
@@ -538,6 +529,8 @@
 
 			// restore
 			theMap.setView(center, zoom);
+			*/
+			gridAnalysis.loadGrid(GRID_LINE_COUNT);
 
 		}
 
@@ -743,13 +736,21 @@
 		projectCommunities();
 		projectCity();
 		initUI();
-		projectGrid();
 
 		// disable page scroll
 		disableScroll();
 
 		window.onload = function()
 		{
+			// get map dimensions
+			var div = d3.select("#svgMap");
+			var w = +div.attr("width");
+			var h = +div.attr("height");
+
+			// initialize all grids
+			gridAnalysis.initGrids(w, h, MIN_GRID_LINE_COUNT, MAX_GRID_LINE_COUNT)
+
+			// run the analysis
 			run_analysis();
 		}
 

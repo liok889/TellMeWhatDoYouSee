@@ -171,6 +171,39 @@ GridAnalysis.prototype.switchMDSPanel = function(view)
 	}
 }
 
+GridAnalysis.prototype.initGrids = function(w, h, minGridLineCount, maxGridLineCount)
+{
+	this.allGrids = d3.map();
+
+	// move map to default center / zoom-level
+	var center = this.map.getCenter();
+	var zoom = this.map.getZoom();
+	this.map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+	for (var i=minGridLineCount; i<=maxGridLineCount; i++)
+	{
+		var cellSize = h / i;
+		var gridRows = Math.ceil(h / cellSize);
+		var gridCols = Math.ceil(w / cellSize);
+
+		var rows = d3.range(1*cellSize, gridRows*cellSize, cellSize * (1.0-GRID_OVERLAP));
+		var cols = d3.range(1*cellSize, gridCols*cellSize, cellSize * (1.0-GRID_OVERLAP));
+				
+		// construct the grid
+		var grid = this.constructGrid(cellSize, cellSize, rows.length+1, cols.length+1, GRID_OVERLAP);
+		this.allGrids.set(i, grid);
+	}
+
+	// restore
+	this.map.setView(center, zoom);
+}
+
+
+GridAnalysis.prototype.loadGrid = function(gridLineCount)
+{
+	this.analysisRequest = this.allGrids.get(gridLineCount);
+}
+
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
 {
 	// construct a grid matrix hich contains
@@ -235,6 +268,8 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 		gridCols: cols,
 		gridRows: rows,
 	};
+
+	return this.analysisRequest;
 }
 
 GridAnalysis.prototype.setRangeLimit = function(range) {
@@ -758,7 +793,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 	else {
 		this.heatmapSelection.style("fill-opacity", HEATMAP_OPACITY);
 	}
-}
+}	
 
 // given an example (edited) time series, plot similarity to it
 GridAnalysis.prototype.showDistanceToExample = function(example)
