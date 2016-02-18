@@ -765,11 +765,27 @@ GridAnalysis.prototype.brushSelectionMembers = function(ids)
 	}
 	this.highlightHeatmapCell(cells);
 
+	// translate ids to matrix indices
+	var matrixIDs = [];
+	for (var i=0, N=ids.length; i<N; i++) 
+	{
+		var id = ids[i];
+		if (isNaN(id))
+		{
+			var cell = strToCell(id);
+			matrixIDs.push(this.ij2index[cell[0]][cell[1]]);
+		}
+		else
+		{
+			matrixIDs.push(id);
+		}
+	}
+
 	// matrix
-	this.brushMatrixElements(ids);
+	this.brushMatrixElements(matrixIDs);
 
 	// MDS
-	this.mds.brushPoints(ids);
+	this.mds.brushPoints(matrixIDs);
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
@@ -783,11 +799,17 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 		}
 
 		(function(hm, grid) {
-			grid.heatmapSelection
+			
+			grid.heatmapSelection.filter(function(d) {
+				return hm.get(d.cell[0] + "_" + d.cell[1]) === true;
+			}).style("fill-opacity", HEATMAP_OPACITY);
+
+
+			grid.heatmapSelection.filter(function(d) {
+				return !hm.get(d.cell[0] + "_" + d.cell[1]);
+			}).transition().duration(120)
 				.style("fill-opacity", function(d) {
-					var c = d.getCell();
-					var highlighted = hm.get(c[0] + "_" + c[1]);
-					return (highlighted ? HEATMAP_OPACITY : 0.0);
+					return 0.0;
 				});
 		})(highlightMap, this);
 	}
@@ -860,9 +882,22 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
 }
 
-GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
+GridAnalysis.prototype.brushMatrixElements = function(brushedIDs, translate)
 {
-	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	if (translate) 
+	{
+		var matrixIDs = []; matrixIDs.length = brushedIDs.length;
+		for (var i=0, N=brushedIDs.length; i<N; i++) {
+			var id = brushedIDs[i];
+			var cell = strToCell(id);
+			matrixIDs[i] = this.ij2index[cell[0]][cell[1]];
+		}
+		this.simMatrix.brushElements(matrixIDs, BRUSH_COLOR);
+	}
+	else
+	{
+		this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	}
 }
 
 GridAnalysis.prototype.brushExplore = function(brushedIDs)

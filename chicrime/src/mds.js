@@ -28,7 +28,8 @@ function MDSPoint(coordinate, cell, _index)
 {
 	this.coordinate = coordinate;
 	this.cell = cell;
-	this.id = _index;
+	this.id = cellToStr(cell);
+	this.index = _index
 }
 
 MDSPoint.prototype.getID = function() {
@@ -861,7 +862,7 @@ MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
 
 	// brush the heatmap and the matrix
 	this.grid.highlightHeatmapCell(brushedPoints, true);
-	this.grid.brushMatrixElements( brushedIDs );
+	this.grid.brushMatrixElements( brushedIDs, true );
 
 	// store a list of MDS points we brushed
 	this.brushedMDSPoints = brushedPoints;
