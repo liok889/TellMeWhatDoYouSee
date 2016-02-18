@@ -439,7 +439,7 @@ ClusterSelector.prototype.brushMembers = function(selection)
 		{
 			ids.push(members[i].id);
 		}
-		this.selectionBrushCallback(ids);
+		this.selectionBrushCallback(ids, selection ? selection.getTimeseries() : undefined);
 	}
 }
 

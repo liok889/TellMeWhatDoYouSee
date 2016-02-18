@@ -78,7 +78,7 @@ Clustering.prototype.setHierarchicalClusters = function(config)
 }
 
 /* Hierarchical clustering */
-Clustering.prototype.hierarchical = function()
+Clustering.prototype.hierarchical = function(idMap)
 {
 	function selectMin(distance)
 	{

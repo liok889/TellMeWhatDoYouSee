@@ -31,8 +31,8 @@ function GridAnalysis(theMap, svgExplore)
 	// initialize callbacks for explore pane
 	(function(grid) 
 	{
-		grid.selector.setSelectionBrushCallback(function(ids) {
-			grid.brushSelectionMembers(ids);
+		grid.selector.setSelectionBrushCallback(function(ids, avgTimeseries) {
+			grid.brushSelectionMembers(ids, avgTimeseries);
 		});
 	
 		grid.selector.setDragCallback(
@@ -417,11 +417,13 @@ GridAnalysis.prototype.data_ready = function()
 		console.log("* hclustering and matrix view found in cache.")
 		clustering.setHierarchicalClusters(cached.clusteringResults);
 	}
+	/*
 	else if (analysisResults.hclusters) 
 	{
 		// hierarchical clustering already done by server
 		clustering.setHierarchicalClusters( analysisResults.hclusters )
 	}
+	*/
 	else {
 		// do clustering
 		clustering.hierarchical();
@@ -722,7 +724,7 @@ GridAnalysis.prototype.makeClusterSelection = function(cluster)
 	for (var i=0, N=cluster.members.length; i<N; i++) 
 	{
 		var id = cluster.members[i];
-		var rc = this.index2ij[id];
+		var rc = isNaN(id) ? strToCell(id) : this.index2ij[id];
 		var geoRect = this.getGeoRect(rc);
 
 		members.push({
@@ -742,7 +744,7 @@ GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 		for (var i=0, N=ids.length; i<N; i++) 
 		{
 			var id = ids[i];
-			var rc = this.index2ij[id];
+			var rc = isNaN(id) ? strToCell(id) : this.index2ij[id];
 			var geoRect = this.getGeoRect(rc);
 
 			members.push({
@@ -755,37 +757,34 @@ GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 	}
 }
 
-GridAnalysis.prototype.brushSelectionMembers = function(ids)
+GridAnalysis.prototype.brushSelectionMembers = function(ids, avgTimeseries)
 {
 	// get cell ids for brushed cells
-	var cells = [];
-	for (var i=0, N=ids.length; i<N; i++) {
+	var cells = []; cells.length = ids.length;
+	for (var i=0, N=ids.length; i<N; i++) 
+	{
 		var cell = this.index2ij[ids[i]];
-		cells.push(cell);
+		cells[i] = cell;
 	}
 	this.highlightHeatmapCell(cells);
 
 	// translate ids to matrix indices
-	var matrixIDs = [];
-	for (var i=0, N=ids.length; i<N; i++) 
+	var actualIDs = []; actualIDs.length = cells.length;
+	for (var i=0, N=cells.length; i<N; i++) 
 	{
-		var id = ids[i];
-		if (isNaN(id))
-		{
-			var cell = strToCell(id);
-			matrixIDs.push(this.ij2index[cell[0]][cell[1]]);
-		}
-		else
-		{
-			matrixIDs.push(id);
-		}
+		var cell = cells[i];
+		actualIDs[i] = cellToStr(cell);
 	}
 
 	// matrix
-	this.brushMatrixElements(matrixIDs);
+	this.brushMatrixElements(ids);
 
 	// MDS
-	this.mds.brushPoints(matrixIDs);
+	this.mds.brushPoints(actualIDs);
+
+	// explorer
+	this.explore.brushDataPoints(avgTimeseries !== undefined ? [{ timeseries: avgTimeseries}] : []);
+
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
@@ -1008,7 +1007,10 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 						.attr("id", "heatmapTimeseriesPopup")
 						.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
 						drawTimeseries(d.getTimeseries(), g);
-					grid.brushCellOut = undefined;
+					if (grid.brushCellTimeOut) {
+						clearTimeout(grid.brushCellTimeOut);
+						grid.brushCellTimeOut = undefined;	
+					}
 					grid.brushCells([ cell ]);
 				}
 
@@ -1021,8 +1023,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 			.on("mouseout", function() {
 				d3.select("#heatmapTimeseriesPopup").remove();
 				d3.select(this).attr("class", "");
-				grid.brushCellOut = true;
-				setTimeout(function() {
+				grid.brushCellTimeout = setTimeout(function() {
 					if (grid.brushCellOut) {
 						grid.brushCells([]);
 					}
@@ -1088,11 +1089,16 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		var i = this.simMatrix.data2ij[cluster.members[k]];
 		if (r > i) r=i;
 		if (s < i) s=i;
-		brushedIDs.push(index);
+		
+		var id = isNaN(index) ? index : cellToStr(this.index2ij[index]);
 		dataPoints.push({
-			id: index,
+			id: id,
+			index: index,
 			timeseries: this.getTimeseries(index)
 		});
+
+		// add to brushed IDs
+		brushedIDs.push(id);
 	}
 
 	// brush the similarity matrix

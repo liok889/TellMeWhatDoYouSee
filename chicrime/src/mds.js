@@ -81,9 +81,11 @@ function MDS(svg, width, height)
 			var nR = (threshold-MIN_MAGIC_THRESHOLD) / (MAX_MAGIC_THRESHOLD-MIN_MAGIC_THRESHOLD);
 			var r = MIN_R + (MAX_R-MIN_R)*nR
 
-			var guideCircle = mds.svg.select("circle.guide");
+			var guideCircle = mds.svg.selectAll("circle.guide");
 			if (guideCircle.size() == 0) {
-				guideCircle = mds.svg.append("circle")
+
+				mds.svg.append("circle")
+					.attr("id", "adjustableGuideCircle")
 					.attr("class", "guide")
 					.style("pointer-events", "none")
 					.style("fill", "white")
@@ -91,15 +93,26 @@ function MDS(svg, width, height)
 					.style("fill-opacity", "0.7")
 					.attr("cx", mouse[0]).attr("cy", mouse[1]);
 
+				mds.svg.append("circle")
+					.attr("class", "guide")
+					.attr("r", MAX_R)
+					.style("pointer-events", "none")
+					.style("fill", "none")
+					.style("stroke", "red")
+					.attr("stroke-dasharray", "2, 2")
+					.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
+				guideCircle = mds.svg.selectAll("circle.guide");
+
 				mds.svg.on("mousemove.circleGuide", function() 
 				{
 					var mouse = d3.mouse(this);
-					mds.svg.select("circle.guide")
+					mds.svg.selectAll("circle.guide")
 						.attr("cx", mouse[0]).attr("cy", mouse[1]);
 
 				})
 			}
-			guideCircle
+			mds.svg.select("#adjustableGuideCircle")
 				.attr("r", r)
 				.attr("cx", mouse[0]).attr("cy", mouse[1]);
 
@@ -113,7 +126,7 @@ function MDS(svg, width, height)
 			}
 
 			mds.circleTimeout = setTimeout(function() {
-				mds.svg.select("circle.guide").transition().duration(150).attr("r", 0.0001).remove();
+				mds.svg.selectAll("circle.guide").transition().duration(150).attr("r", 0.0001).remove();
 				mds.svg.on("mousemove.circleGuide", null);
 				mds.circleTimeout = undefined;
 			}, 2000);
@@ -147,8 +160,17 @@ function MDS(svg, width, height)
 	})(this);
 }
 
-MDS.prototype.setColorMap = function(_colorMap) {
-	this.colorMap = _colorMap;
+MDS.prototype.setColorMap = function(_colorMap) 
+{
+	// translate indices in color maps to real IDs
+	this.colorMap = d3.map();
+	(function(mds, _colorMap, actualColorMap)
+	{
+		_colorMap.forEach(function(key, value) {
+			var id = cellToStr(mds.grid.index2ij[key]);
+			actualColorMap.set(id, value);
+		});
+	})(this, _colorMap, this.colorMap);
 }
 
 MDS.prototype.getPoints = function() {
@@ -410,6 +432,12 @@ MDS.prototype.pickMagicPoint = function(i)
 	}
 	this.magicPoint = i;
 
+	// cancel unpick events
+	if (this.unpickTimer) {
+		clearTimeout(this.unpickTimer);
+		this.unpickTimer = undefined;
+	}
+
 	// base time series
 	var magicPoint = this.mdsPoints[i];
 	var ts = this.grid.getTimeseries(magicPoint.id); 
@@ -434,7 +462,7 @@ MDS.prototype.pickMagicPoint = function(i)
 			if (!MAX_GEOM_DISTANCE || pDistanceSq(magicPoint, d) < MAX_GEOM_DISTANCE)
 			{
 				var ts2 = mds.grid.getTimeseries(d.id);
-				var distance = mds.distances[d.id][magicPoint.id] / maxDistance;
+				var distance = mds.distances[d.index][magicPoint.index] / maxDistance;
 				if (distance <= mds.magicThreshold)
 				{
 					// add to lists of brushed points
@@ -477,13 +505,19 @@ MDS.prototype.unpickMagicPoint = function(i)
 		return;
 	}
 
-	this.mdsPointSelection.style("fill", "");
-	
-	this.brushedSelection = undefined;
-	this.magicPoint = undefined;
+	(function(mds) 
+	{
+		mds.unpickTimer = setTimeout(function() 
+		{
+			mds.mdsPointSelection.style("fill", "");
+			
+			mds.brushedSelection = undefined;
+			mds.magicPoint = undefined;
 
-	// propagate un-brush event
-	this.propagateBrushEvent([], []);
+			// propagate un-brush event
+			mds.propagateBrushEvent([], []);
+		}, 50);
+	})(this)
 }
 
 MDS.prototype.drawConvexHull = function(clusters)
