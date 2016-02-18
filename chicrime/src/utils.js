@@ -36,7 +36,6 @@ function mouseInContainer(coord, containerSelection)
 {
   var w = +containerSelection.attr("width");
   var h = +containerSelection.attr("height");
-  console.log("\tw: " + w + ", h: " + h);
   return (coord[0] >= 0 && coord[0] <= w &&coord[1] >= 0 && coord[1] <= h);
 }
 
@@ -124,7 +123,7 @@ function getCoords(elem) { // crossbrowser version
 function toggleButton(on, offList)
 {
   var on_selection = (typeof on === "string" ? d3.select("#" + on) : on);
-  on_selection.style("background-color", '#fff5cc');
+  on_selection.style("background-color", '#ffeee6');
   if (offList) {
     for (var i=0, N=offList.length; i<N; i++) {
       var off_selection = (typeof offList[i] === "string" ? d3.select("#" + offList[i]) : offList[i]);

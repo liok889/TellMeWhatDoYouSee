@@ -81,7 +81,7 @@ Selection.prototype.populateSelection = function(g)
 	(function(thisSelection) 
 	{
 
-		var imgH = 1.7*ClusterSelector.RECT_H/4-4;
+		var imgH = 1.3*ClusterSelector.RECT_H/4-4;
 		var imgX = ClusterSelector.RECT_W+ClusterSelector.RECT_PAD;
 
 		thisSelection.g.append("image")

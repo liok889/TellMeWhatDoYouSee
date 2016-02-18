@@ -173,6 +173,7 @@ GridAnalysis.prototype.switchMDSPanel = function(view)
 
 GridAnalysis.prototype.initGrids = function(w, h, minGridLineCount, maxGridLineCount)
 {
+	// map to store all grid
 	this.allGrids = d3.map();
 
 	// move map to default center / zoom-level
@@ -450,7 +451,7 @@ GridAnalysis.prototype.data_ready = function()
 	this.drawMDS();
 
 	// Small-Multipatterns
-	this.smallMultipatterns.makeSimpleLayout(7, 6);
+	this.smallMultipatterns.makeSimpleLayout(9, 6);
 
 	// activate view
 	this.switchMDSPanel();
@@ -490,7 +491,7 @@ GridAnalysis.prototype.getTimeseriesCount = function()
 
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
-	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
+	var cell = Array.isArray(index) ? index : typeof index === "string" ? strToCell(index) : this.analysisResults.tsIndex[index];
 	return this.getGeoRect(cell).getTimeseries();
 }
 
@@ -1151,3 +1152,13 @@ function symmetrizeSimMatrix(matrix)
 	return matrix;
 }
 
+function strToCell(str)
+{
+	var tokens = str.split("_");
+	return [+tokens[0], +tokens[1]];
+}
+
+function cellToStr(cell)
+{
+	return cell[0] + "_" + cell[1];
+}

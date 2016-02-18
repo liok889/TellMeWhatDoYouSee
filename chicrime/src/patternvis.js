@@ -6,7 +6,7 @@
 
 var MULTIPATTERNS_PAD = 4;
 var MULTIPATTERNS_CELL_W = 50;
-var MULTIPATTERNS_CELL_H = 30;
+var MULTIPATTERNS_CELL_H = 20;
 
 function PatternCell(r, c, group)
 {
@@ -141,7 +141,7 @@ PatternVis.prototype.makeSimpleLayout = function(R, C)
 				cell.group.append("rect")
 					.attr("width", thisLayout.cellW)
 					.attr("height", thisLayout.cellH)
-					.style("stroke-width", "0.5px")
+					.style("stroke-width", "0.1px")
 					.style("stroke", "black")
 					.style("fill", "none");
 
@@ -155,7 +155,7 @@ PatternVis.prototype.makeSimpleLayout = function(R, C)
 					.attr("transform", "translate(" + MULTIPATTERNS_PAD + "," + MULTIPATTERNS_PAD + ")")
 					.attr("d", pathGenerator(timeseries.getSeries()))
 					.attr("stroke", "black")
-					.attr("stroke-width", "1px")
+					.attr("stroke-width", "0.5px")
 					.attr("fill", "none");
 			});
 	})(this, updateSelection.enter());
