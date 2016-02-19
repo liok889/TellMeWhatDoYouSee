@@ -74,7 +74,7 @@ function MDS(svg, width, height)
 	{
 		function addGuidelineCircle(mouse)
 		{
-			var MAX_R = 50;
+			var MAX_R = 35;
 			var MIN_R = 10;
 
 			var threshold = mds.magicThreshold

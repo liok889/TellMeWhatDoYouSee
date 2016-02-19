@@ -640,11 +640,6 @@ GridAnalysis.prototype.getRequestKey = function()
 	}
 }
 
-GridAnalysis.prototype.drawSmallMultipatterns = function()
-{
-	this.smallMultipatterns.make
-}
-
 GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 {
 	// set dimensions for matrix elements / dendogram, based on dimensions of the canvas
@@ -716,6 +711,38 @@ GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 
 	// draw actual image on screen
 	this.onscreenCanvas.getContext("2d").drawImage(this.offscreenCanvas, 0, 0);
+}
+
+GridAnalysis.prototype.startRecording = function()
+{
+	this.recording = true;
+	this.recordedPath = [];
+}
+GridAnalysis.prototype.stopRecording = function()
+{
+	this.recording = false;
+}
+GridAnalysis.prototype.showRecordedFlow = function()
+{
+	var SNAPSHOT_COUNT = 5;
+	var SNAPSHOT_COLORS = [];
+
+	if (this.recordedPath.length < 2) {
+		return;
+	}
+
+	var snapshotCount = this.recordedPath.length < SNAPSHOT_COUNT ? this.recordedPath.length : SNAPSHOT_COUNT;
+	var m = this.recordedPath.length / snapshotCount;
+	var snapshots = [];
+	for (var i=0; i<snapshotCount; i++) 
+	{
+		var dataIndex = Math.max(Math.min(SNAPSHOT_COUNT-1, Math.floor(.5 + i*m)), 0);
+		var colorIndex = i;
+
+		snapshots.push({
+
+		})
+	}
 }
 
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 
@@ -1007,10 +1034,15 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 						.attr("id", "heatmapTimeseriesPopup")
 						.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
 						drawTimeseries(d.getTimeseries(), g);
-					if (grid.brushCellTimeOut) {
-						clearTimeout(grid.brushCellTimeOut);
-						grid.brushCellTimeOut = undefined;	
+					
+					// cancel unbrush timeout if any
+					if (grid.brushCellTimeout) 
+					{
+						clearTimeout(grid.brushCellTimeout);
+						grid.brushCellTimeout = undefined;	
 					}
+
+					// propagate event
 					grid.brushCells([ cell ]);
 				}
 
@@ -1024,9 +1056,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				d3.select("#heatmapTimeseriesPopup").remove();
 				d3.select(this).attr("class", "");
 				grid.brushCellTimeout = setTimeout(function() {
-					if (grid.brushCellOut) {
-						grid.brushCells([]);
-					}
+					grid.brushCells([]);
 				}, 150);
 			});
 		grid.heatmapSelection = selection;
@@ -1046,12 +1076,14 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 GridAnalysis.prototype.brushCells = function(cells)
 {
-	var brushedIDs = [], dataPoints = [];
+	var actualIDs = [], matrixIDs = [], dataPoints = [];
 	for (var i=0, len=cells.length; i < len; i++)
 	{
 		var cell = cells[i];
 		var index = this.ij2index[ cell[0] ][ cell[1] ];
-		brushedIDs.push( index );
+		actualIDs.push( cellToStr(cell) );
+		matrixIDs.push( index );
+
 		dataPoints.push({
 			index: index,
 			timeseries: this.getTimeseries(index)
@@ -1063,10 +1095,10 @@ GridAnalysis.prototype.brushCells = function(cells)
 	this.explore.brushDataPoints( dataPoints );
 
 	// brush similarity matrix as well
-	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	this.simMatrix.brushElements(matrixIDs, BRUSH_COLOR);
 
 	// brush MDS plot
-	this.mds.brushPoints(brushedIDs);
+	this.mds.brushPoints(actualIDs);
 }
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
