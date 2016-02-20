@@ -629,10 +629,11 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 			.attr("d", "");
 	}
 	
-	var path = g.select("path");
+	var path = g.select("path.brushCurve");
 	if (timeseries) {
 		var pathGenerator = timeseries.getPathGenerator(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD);
 		path.attr("d", pathGenerator( timeseries.getSeries() ));
+		putNodeOnTop(path.node());
 	}
 	else
 	{
@@ -668,6 +669,7 @@ SignalVis.prototype.showSignalFlow = function(flow)
 
 	if (!flow) return;
 
+	var paths = [];
 	for (var i=0, N=flow.length; i<N-1; i++) 
 	{
 		var s1 = flow[i].timeseries;
@@ -689,19 +691,40 @@ SignalVis.prototype.showSignalFlow = function(flow)
 			);
 		})(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD, s1, s2);
 
-		var series = s1.getSeries().concat(s2.getSeries().slice(0).reverse());
-
-		// append the path
-		g.append("path")
-			.attr("class", "flowSignal")
-			.attr("d", pathGenerator(series))
-			.style("stroke", "#222222")
-			.style("stoke-width", 0.5)
-			.style("stroke-opacity", 0.5)
-			.style("fill-opacity", 0.4)
-			.style("fill", flow[i].color);
-			//.attr("fill", "black");
+		paths.push({
+			color: flow[i].color,
+			generator: pathGenerator,
+			series: s1.getSeries().concat(s2.getSeries().slice(0).reverse())
+		})
 	}
+
+	// append the paths
+	var selection = g.selectAll("path.flowSignal").data(paths).enter().append("path")
+		.attr("class", "flowSignal")
+		.attr("d", function(d) { return d.generator(d.series); })
+		.style("fill", function(d) { return d.color; })
+		.style("stroke", "#222222")
+		.style("stroke-width", 0.5)
+		.style("stroke-opacity", 0.4)
+		.style("fill-opacity", 0.4)
+		.on("mouseenter", function() {
+			putNodeOnTop(this);
+			d3.select(this)
+				.style("stroke-width", 1.0)
+				.style("fill-opacity", 1.0)
+				.style("stroke-opacity", 1.0);
+		});
+
+	(function(pathSelection) {
+		pathSelection.on("mouseout", function() {
+			pathSelection.order();
+			d3.select(this)
+				.style("stroke-width", 0.5)
+				.style("fill-opacity", 0.4)
+				.style("stroke-opacity", 0.4);
+		});
+	})(selection);
+
 }
 
 SignalVis.prototype.brushSignal = function(_signal)

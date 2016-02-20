@@ -98,7 +98,7 @@ function MDS(svg, width, height)
 					.attr("r", MAX_R)
 					.style("pointer-events", "none")
 					.style("fill", "none")
-					.style("stroke", "red")
+					.style("stroke", "black")
 					.attr("stroke-dasharray", "2, 2")
 					.attr("cx", mouse[0]).attr("cy", mouse[1]);
 
@@ -166,8 +166,9 @@ MDS.prototype.setColorMap = function(_colorMap)
 	this.colorMap = d3.map();
 	(function(mds, _colorMap, actualColorMap)
 	{
-		_colorMap.forEach(function(key, value) {
-			var id = cellToStr(mds.grid.index2ij[key]);
+		_colorMap.forEach(function(key, value) 
+		{
+			var id = isNaN(key) ? key : cellToStr(mds.grid.index2ij[key]);
 			actualColorMap.set(id, value);
 		});
 	})(this, _colorMap, this.colorMap);

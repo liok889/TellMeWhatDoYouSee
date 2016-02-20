@@ -722,6 +722,7 @@ GridAnalysis.prototype.startRecording = function()
 	this.recording = true;
 	this.recordedPath = [];
 	this.flow = [];
+	this.explore.showFlow(null);
 }
 GridAnalysis.prototype.stopRecording = function()
 {
