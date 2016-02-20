@@ -892,7 +892,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
 {
 	// brush explorer pane
-	this.grid.brushExplore( brushedIDs );
+	var avgTimeseries = this.grid.brushExplore( brushedIDs );
 
 	// brush the heatmap and the matrix
 	this.grid.highlightHeatmapCell(brushedPoints, true);
@@ -902,9 +902,13 @@ MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
 	this.brushedMDSPoints = brushedPoints;
 	this.brushedIDs = brushedIDs;
 
-
 	// apply selection color
 	this.applyColorMap(brushedIDs);
+
+	// capture "flow"
+	if (this.grid.isRecording()) {
+		this.grid.captureFlow( avgTimeseries );
+	}
 }
 
 // If the brush is empty, select all circles.

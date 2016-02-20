@@ -651,6 +651,59 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 	}
 }
 
+SignalVis.prototype.showSignalFlow = function(flow)
+{
+	var g = this.group.selectAll("g.brushSignalGroup");
+	var options = this.options;
+
+	if (g.size() == 0) 
+	{
+		g = this.group.append("g")
+			.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
+			.attr("class", "brushSignalGroup");
+	}
+
+	// remove any earlier flows
+	g.selectAll("path.flowSignal").remove();
+
+	if (!flow) return;
+
+	for (var i=0, N=flow.length; i<N-1; i++) 
+	{
+		var s1 = flow[i].timeseries;
+		var s2 = flow[i+1].timeseries;
+
+		var pathGenerator = 
+		(function(width, height, pad, s1, s2) {
+			return (function(W, H, N, seriesMax1, seriesMax2, X, Y) 
+			{
+				return d3.svg.line()
+					//.interpolate("linear-closed")
+					.x(X || function(d, i) { return (W/(N-1)) * (i < N ? i : (N-1)-(i-N)); })
+					.y(Y || function(d, i) { return (1.0-d/(i < N ? seriesMax1 : seriesMax2)) * H; });
+		
+			})(
+				width - (pad ? 2*pad : 0), 
+				height - (pad ? 2*pad : 0), 
+				s1.size(), s1.figureMax(), s2.figureMax()
+			);
+		})(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD, s1, s2);
+
+		var series = s1.getSeries().concat(s2.getSeries().slice(0).reverse());
+
+		// append the path
+		g.append("path")
+			.attr("class", "flowSignal")
+			.attr("d", pathGenerator(series))
+			.style("stroke", "#222222")
+			.style("stoke-width", 0.5)
+			.style("stroke-opacity", 0.5)
+			.style("fill-opacity", 0.4)
+			.style("fill", flow[i].color);
+			//.attr("fill", "black");
+	}
+}
+
 SignalVis.prototype.brushSignal = function(_signal)
 {
 	var pathSelection = this.group.selectAll("g.individualSignalGroup").selectAll("path");
@@ -1161,6 +1214,15 @@ Explore.prototype.brushDataPoints = function(points)
 			updateSignals(explore.signalList, avg);
 		}
 	})(this, points, avgTimeseries);
+	return avgTimeseries;
+}
+
+Explore.prototype.showFlow = function(flow)
+{
+	for (var i=0, N=this.signalList.length; i<N; i++) 
+	{
+		this.signalList[i].showSignalFlow(flow);
+	}
 }
 
 Explore.COLS = 1;

@@ -713,36 +713,68 @@ GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 	this.onscreenCanvas.getContext("2d").drawImage(this.offscreenCanvas, 0, 0);
 }
 
+GridAnalysis.prototype.isRecording = function()
+{
+	return this.recording;
+}
 GridAnalysis.prototype.startRecording = function()
 {
 	this.recording = true;
 	this.recordedPath = [];
+	this.flow = [];
 }
 GridAnalysis.prototype.stopRecording = function()
 {
 	this.recording = false;
 }
-GridAnalysis.prototype.showRecordedFlow = function()
+
+GridAnalysis.prototype.captureFlow = function(timeseries)
 {
-	var SNAPSHOT_COUNT = 5;
-	var SNAPSHOT_COLORS = [];
+	if (this.recording) 
+	{
+		// add current time series
+		this.recordedPath.push(timeseries);
+		
+		// construct flow
+		var flow = this.constructFlow();
+		
+		// show it in the exploration pane
+		this.explore.showFlow(flow);
+		return true;
+	}
+	else
+	{
+		this.explore.showFlow(null)
+		return false;
+	}
+}
+GridAnalysis.prototype.constructFlow = function()
+{
+	var SNAPSHOT_COUNT = 6;
+	var SNAPSHOT_COLORS = ['#fee5d9','#fcae91','#fb6a4a','#de2d26','#a50f15'];
 
 	if (this.recordedPath.length < 2) {
 		return;
 	}
 
 	var snapshotCount = this.recordedPath.length < SNAPSHOT_COUNT ? this.recordedPath.length : SNAPSHOT_COUNT;
-	var m = this.recordedPath.length / snapshotCount;
 	var snapshots = [];
+	
 	for (var i=0; i<snapshotCount; i++) 
 	{
-		var dataIndex = Math.max(Math.min(SNAPSHOT_COUNT-1, Math.floor(.5 + i*m)), 0);
-		var colorIndex = i;
+		var n = i/(snapshotCount-1);
+		var n_1 = snapshotCount < 2 ? 0 : i/(snapshotCount-2);
+
+		var dataIndex = Math.floor(n * (this.recordedPath.length-1));
+		var colorIndex = Math.floor(n * (SNAPSHOT_COLORS.length-1));
 
 		snapshots.push({
-
-		})
+			timeseries: this.recordedPath[ dataIndex ],
+			color: i < snapshotCount-1 ? SNAPSHOT_COLORS[ colorIndex ] : undefined
+		});
 	}
+
+	return snapshots;	
 }
 
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 
@@ -935,7 +967,7 @@ GridAnalysis.prototype.brushExplore = function(brushedIDs)
 			timeseries: this.getTimeseries(brushedIDs[i])
 		});
 	}
-	this.explore.brushDataPoints(timeseries);
+	return this.explore.brushDataPoints(timeseries);
 }
 
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)

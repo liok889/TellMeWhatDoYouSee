@@ -410,6 +410,19 @@
 			d3.select("#signalForm").selectAll("input").on("click", function() {
 				run_analysis();
 			});
+
+			// bind shift key
+			d3.select("body").on("keydown", function() {
+				if (event.keyCode == 16) {
+					gridAnalysis.startRecording();
+				}
+			}).on("keyup", function() {
+				//console.log("shiftKey: " + event.shiftKey + ", keyCode: " + event.keyCode);
+				if (event.keyCode == 16) {
+					gridAnalysis.stopRecording();
+				}
+			});
+
 			/*
 			// run analysis
 			d3.select("#buttonRunAnalysis").on("click", function() 
