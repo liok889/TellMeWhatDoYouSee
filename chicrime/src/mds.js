@@ -19,6 +19,9 @@ var MAX_MAGIC_THRESHOLD = 0.6;
 var MIN_MAGIC_THRESHOLD = 0.0;
 var THRESHOLD_RATE = 0.005 * 0.7;
 
+
+// background color for the MDS
+var MDS_BG_COLOR = "#f2f2f2";
 /* =======================
  * MDSPoint
  * =======================
@@ -62,12 +65,23 @@ function MDS(svg, width, height)
 	this.h = height || +svg.attr("height");
 	this.colorMap = d3.map();
 
+	// assign background color to SVG
+	this.svg.style("background-color", MDS_BG_COLOR);
+
+	// append an image
+	this.svg.append("image")
+		.attr("id", "drawingImage")
+		.attr("xlink:href", "")
+		.attr("x", 0)
+		.attr("y", 0)
+		.attr("width", this.w + "px")
+		.attr("height", this.h + "px");
+
 	// selection mode
 	this.selectionMode = SELECTION_MODE_SQUARE;
 
 	// threshold for magic selection
 	this.magicThreshold = 0.15;
-
 
 
 	(function(mds) 
@@ -158,6 +172,23 @@ function MDS(svg, width, height)
 		});
 
 	})(this);
+
+	// create an offscreen canvas
+	this.offscreenCanvas = document.createElement('canvas');
+	this.offscreenCanvas.width = this.w;
+	this.offscreenCanvas.height = this.h;
+	this.ctx = this.offscreenCanvas.getContext("2d");
+	this.clearCanvas();
+}
+
+MDS.prototype.clearCanvas = function()
+{
+	this.ctx.fillStyle = MDS_BG_COLOR;
+	this.ctx.fillRect(0, 0, this.w, this.h);
+	this.ctx.fillStyle = "#ffcccc";
+	
+	d3.select("#drawingImage")
+		.attr("xlink:href", this.offscreenCanvas.toDataURL());
 }
 
 MDS.prototype.setColorMap = function(_colorMap) 
@@ -859,6 +890,13 @@ MDS.prototype.brushmove = function(hasNotMoved)
 			return brushedSelection;
 			
 		})(brushedPoints, brushedIDs, this.svg);
+
+		// draw the extent of the brush on the canvas
+		if (this.grid.isRecording()) {
+			this.ctx.fillRect(e[0][0], e[0][1], e[1][0]-e[0][0], e[1][1]-e[0][1]);
+			d3.select("#drawingImage")
+				.attr("xlink:href", this.offscreenCanvas.toDataURL());
+		}
 	}
 	else
 	{

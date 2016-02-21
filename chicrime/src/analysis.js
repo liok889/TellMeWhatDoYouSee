@@ -549,12 +549,16 @@ function drawTimeseries(timeseries, group)
 	}
 
 	// create a rectangle to serve as the background of the linechart
-	group.append("rect")
-		.attr("width", GridAnalysis.GRAPH_W+10)
-		.attr("height", GridAnalysis.GRAPH_H+10)
-		.attr("x", "-5")
-		.attr("y", "-5")
-		.style("fill", "white");
+	var rectSelect = group.select("rect");
+	if (rectSelect.size() == 0) 
+	{
+		rectSelect = group.append("rect")
+			.attr("width", GridAnalysis.GRAPH_W+10)
+			.attr("height", GridAnalysis.GRAPH_H+10)
+			.attr("x", "-5")
+			.attr("y", "-5")
+			.style("fill", "white");
+	}
 
 	// create a line projection to show the shape of the heatmap
 	var lineFunction = d3.svg.line()
@@ -562,18 +566,17 @@ function drawTimeseries(timeseries, group)
 		.y(function(d, i) { return (1.0-d.y) * GridAnalysis.GRAPH_H; })
 		.interpolate("linear");
 
-	// create a line projection
-	var zeroHeightLineFunction = d3.svg.line()
-		.x(function(d, i) { return d.x * GridAnalysis.GRAPH_W; })
-		.y(function(d, i) { return GridAnalysis.GRAPH_H; })
-		.interpolate("cardinal");
 
 	// path drawing the actual line chart
-	group.append("path")
-		.attr("d", lineFunction(data))
-		.attr("stroke", "black")
-		.style("stroke-width", "1px")
-		.style("fill", "none");
+	var pathSelect = group.select("path");
+	if (pathSelect.size() == 0)
+	{
+		pathSelect = group.append("path")
+			.attr("stroke", "black")
+			.style("stroke-width", "1px")
+			.style("fill", "none");
+	}
+	pathSelect.attr("d", lineFunction(data));
 }
 
 GridAnalysis.prototype.drawMDS = function()
@@ -723,6 +726,7 @@ GridAnalysis.prototype.startRecording = function()
 	this.recordedPath = [];
 	this.flow = [];
 	this.explore.showFlow(null);
+	this.mds.clearCanvas();
 }
 GridAnalysis.prototype.stopRecording = function()
 {
@@ -823,21 +827,24 @@ GridAnalysis.prototype.brushSelectionMembers = function(ids, avgTimeseries)
 	var cells = []; cells.length = ids.length;
 	for (var i=0, N=ids.length; i<N; i++) 
 	{
-		var cell = this.index2ij[ids[i]];
+		var index = ids[i];
+		var cell = isNaN(index) ? strToCell(index) : this.index2ij[index];
 		cells[i] = cell;
 	}
 	this.highlightHeatmapCell(cells);
 
 	// translate ids to matrix indices
 	var actualIDs = []; actualIDs.length = cells.length;
+	var matrixIDs = []; matrixIDs.length = cells.length;
 	for (var i=0, N=cells.length; i<N; i++) 
 	{
 		var cell = cells[i];
 		actualIDs[i] = cellToStr(cell);
+		matrixIDs[i] = this.ij2index[cell[0]][cell[1]];
 	}
 
 	// matrix
-	this.brushMatrixElements(ids);
+	this.brushMatrixElements(matrixIDs);
 
 	// MDS
 	this.mds.brushPoints(actualIDs);
@@ -1061,13 +1068,6 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				var ts = d.getTimeseries();
 				if (ts && ts.size() > 1) 
 				{
-					var cell = d.getCell();
-					var mouse = d3.mouse(svg.node());
-					var g = overlayGroup.append('g')
-						.attr("id", "heatmapTimeseriesPopup")
-						.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
-						drawTimeseries(d.getTimeseries(), g);
-					
 					// cancel unbrush timeout if any
 					if (grid.brushCellTimeout) 
 					{
@@ -1075,22 +1075,34 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 						grid.brushCellTimeout = undefined;	
 					}
 
+					var cell = d.getCell();
+					var mouse = d3.mouse(svg.node());
+					var g = d3.select("#heatmapTimeseriesPopup");
+					if (g.size() == 0) 
+					{
+						g = overlayGroup.append('g')
+							.attr("id", "heatmapTimeseriesPopup");
+					}
+					g.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
+					drawTimeseries(d.getTimeseries(), g);
+					
 					// propagate event
 					grid.brushCells([ cell ]);
 				}
 
-				d3.select(this).attr("class", "strokedHeatmapCell");
-
-				// remove and append to the top
-				var n = jQuery(this);
-				n.parent().append(n.detach());
+				// put cell on top and add a stroke around this cell
+				putNodeOnTop(this);
+				d3.select(this)
+					.attr("class", "strokedHeatmapCell");
 			})
-			.on("mouseout", function() {
-				d3.select("#heatmapTimeseriesPopup").remove();
+			.on("mouseout", function() 
+			{
 				d3.select(this).attr("class", "");
-				grid.brushCellTimeout = setTimeout(function() {
+				grid.brushCellTimeout = setTimeout(function() 
+				{
+					d3.select("#heatmapTimeseriesPopup").remove();
 					grid.brushCells([]);
-				}, 150);
+				}, 100);
 			});
 		grid.heatmapSelection = selection;
 
@@ -1234,7 +1246,7 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 			// unbrush the MDS points
 			grid.mds.brushPoints();
 
-		}, 200);
+		}, 100);
 	})(this, cluster);
 }
 
