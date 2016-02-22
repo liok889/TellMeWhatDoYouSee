@@ -111,7 +111,10 @@ Selection.prototype.populateSelection = function(g)
 				thisSelection.rect
 					.style("stroke", BRUSH_COLOR)
 					.style("stroke-width", "2px");
-				thisSelection.parentSelector.brushOut = undefined;
+				if (thisSelection.parentSelector.brushOut) {
+					clearTimeout(thisSelection.parentSelector.brushOut);
+					thisSelection.parentSelector.brushOut = undefined;
+				}
 				thisSelection.parentSelector.brushMembers(thisSelection);
 
 			})
@@ -120,13 +123,9 @@ Selection.prototype.populateSelection = function(g)
 				thisSelection.rect
 					.style("stroke", "")
 					.style("stroke-width", "");
-				thisSelection.parentSelector.brushOut = true;
-
-				setTimeout(function() {
-					if (thisSelection.parentSelector.brushOut) {
-						thisSelection.parentSelector.brushMembers();
-					}
-				}, 150);
+				thisSelection.parentSelector.brushOut = setTimeout(function() {
+					thisSelection.parentSelector.brushMembers();
+				}, 75);
 			})
 			.on("mousedown", function() {
 				thisSelection.parentSelector.beginDragSelection(thisSelection);

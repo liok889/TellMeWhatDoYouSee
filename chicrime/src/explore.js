@@ -652,7 +652,7 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 	}
 }
 
-SignalVis.prototype.showSignalFlow = function(flow)
+SignalVis.prototype.showSignalSnapshots = function(snapshots)
 {
 	var g = this.group.selectAll("g.brushSignalGroup");
 	var options = this.options;
@@ -667,20 +667,19 @@ SignalVis.prototype.showSignalFlow = function(flow)
 	// remove any earlier flows
 	g.selectAll("path.flowSignal").remove();
 
-	if (!flow) return;
+	if (!snapshots) return;
 
 	var paths = [];
-	for (var i=0, N=flow.length; i<N-1; i++) 
+	for (var i=0, N=snapshots.length; i<N-1; i++) 
 	{
-		var s1 = flow[i].timeseries;
-		var s2 = flow[i+1].timeseries;
+		var s1 = snapshots[i].timeseries;
+		var s2 = snapshots[i+1].timeseries;
 
 		var pathGenerator = 
 		(function(width, height, pad, s1, s2) {
 			return (function(W, H, N, seriesMax1, seriesMax2, X, Y) 
 			{
 				return d3.svg.line()
-					//.interpolate("linear-closed")
 					.x(X || function(d, i) { return (W/(N-1)) * (i < N ? i : (N-1)-(i-N)); })
 					.y(Y || function(d, i) { return (1.0-d/(i < N ? seriesMax1 : seriesMax2)) * H; });
 		
@@ -692,36 +691,48 @@ SignalVis.prototype.showSignalFlow = function(flow)
 		})(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD, s1, s2);
 
 		paths.push({
-			color: flow[i].color,
-			generator: pathGenerator,
-			series: s1.getSeries().concat(s2.getSeries().slice(0).reverse())
+			color: snapshots[i].color,
+			pathGenerator: pathGenerator,
+			ts: [s1, s2],
+			snapshots: [snapshots[i], snapshots[i+1]],
+			shape: s1.getSeries().concat(s2.getSeries().slice(0).reverse())
 		})
 	}
 
 	// append the paths
 	var selection = g.selectAll("path.flowSignal").data(paths).enter().append("path")
 		.attr("class", "flowSignal")
-		.attr("d", function(d) { return d.generator(d.series); })
+		.attr("d", function(d) { return d.pathGenerator(d.shape); })
 		.style("fill", function(d) { return d.color; })
-		.style("stroke", "#222222")
-		.style("stroke-width", 0.5)
-		.style("stroke-opacity", 0.4)
-		.style("fill-opacity", 0.4)
-		.on("mouseenter", function() {
+		.on("mouseenter", function(d)
+		{
 			putNodeOnTop(this);
 			d3.select(this)
 				.style("stroke-width", 1.0)
-				.style("fill-opacity", 1.0)
-				.style("stroke-opacity", 1.0);
+				.style("stroke-opacity", 0.7)
+				.style("fill-opacity", 1.0);
+		
+			// brush first snapshot
+			if (gridAnalysis.brushSelectionTimeout) 
+			{
+				clearTimeout(gridAnalysis.brushSelectionTimeout);
+				gridAnalysis.brushSelectionTimeout = undefined;
+			}
+			gridAnalysis.brushSelectionMembers(d.snapshots[0].brushedIDs, d.ts[0]);
+
 		});
 
 	(function(pathSelection) {
-		pathSelection.on("mouseout", function() {
+		pathSelection.on("mouseout", function() 
+		{
 			pathSelection.order();
 			d3.select(this)
-				.style("stroke-width", 0.5)
-				.style("fill-opacity", 0.4)
-				.style("stroke-opacity", 0.4);
+				.style("stroke-width", "")
+				.style("stroke-opacity", "")
+				.style("stroke-opacity", "");
+			gridAnalysis.brushSelectionTimeout = setTimeout(function() {
+				gridAnalysis.brushSelectionMembers([], undefined);
+			}, 0);
 		});
 	})(selection);
 
@@ -1242,9 +1253,10 @@ Explore.prototype.brushDataPoints = function(points)
 
 Explore.prototype.showFlow = function(flow)
 {
+	var snapshots = flow.snapshots;
 	for (var i=0, N=this.signalList.length; i<N; i++) 
 	{
-		this.signalList[i].showSignalFlow(flow);
+		this.signalList[i].showSignalSnapshots(snapshots);
 	}
 }
 

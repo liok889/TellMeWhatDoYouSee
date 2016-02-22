@@ -2,11 +2,19 @@
  * Grid-based analysis
  * ============================================
  */
+// heatmap
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
+// two modes
 var SHOW_MDS = 1;
 var SHOW_SMALL_MULTIPATTERNS = 2;
+
+// pattern flow parameters
+var FLOW_SNAPSHOT_COUNT = 6;
+var FLOW_SNAPSHOT_COLORS = 
+	['#fef0d9','#fdcc8a','#fc8d59','#e34a33','#b30000'];
+	//['#fee5d9','#fcae91','#fb6a4a','#de2d26','#a50f15'];
 
 function GridAnalysis(theMap, svgExplore)
 {
@@ -725,44 +733,61 @@ GridAnalysis.prototype.startRecording = function()
 	this.recording = true;
 	this.recordedPath = [];
 	this.flow = [];
-	this.explore.showFlow(null);
-	this.mds.clearCanvas();
+	this.explore.showFlow({ snapshots: [], patternPath: [] });
+	this.mds.clearPattern();
 }
 GridAnalysis.prototype.stopRecording = function()
 {
 	this.recording = false;
 }
 
-GridAnalysis.prototype.captureFlow = function(timeseries)
+GridAnalysis.prototype.captureFlow = function(timeseries, additionalData)
 {
 	if (this.recording) 
 	{
 		// add current time series
-		this.recordedPath.push(timeseries);
+		var record = {
+			timeseries: timeseries
+		};
+
+		// tag options along
+		for (var key in additionalData) {
+			// skip loop if the property is from prototype
+			if (!additionalData.hasOwnProperty(key)) {
+				continue;
+			}
+			else
+			{
+				record[key] = additionalData[key];
+			}
+		}
+
+    	this.recordedPath.push(record);
 		
-		// construct flow
-		var flow = this.constructFlow();
-		
+		// construct flow object
+		var flow = {
+			snapshots: this.generateSnapshots(),
+			patternPath: this.recordedPath
+		};
+
 		// show it in the exploration pane
 		this.explore.showFlow(flow);
-		return true;
+		return flow;
 	}
 	else
 	{
-		this.explore.showFlow(null)
-		return false;
+		this.explore.showFlow({ snapshots: [], patternPath: [] });
+		return null;
 	}
 }
-GridAnalysis.prototype.constructFlow = function()
-{
-	var SNAPSHOT_COUNT = 6;
-	var SNAPSHOT_COLORS = ['#fee5d9','#fcae91','#fb6a4a','#de2d26','#a50f15'];
 
+GridAnalysis.prototype.generateSnapshots = function()
+{
 	if (this.recordedPath.length < 2) {
-		return;
+		return [];
 	}
 
-	var snapshotCount = this.recordedPath.length < SNAPSHOT_COUNT ? this.recordedPath.length : SNAPSHOT_COUNT;
+	var snapshotCount = this.recordedPath.length < FLOW_SNAPSHOT_COUNT ? this.recordedPath.length : FLOW_SNAPSHOT_COUNT;
 	var snapshots = [];
 	
 	for (var i=0; i<snapshotCount; i++) 
@@ -771,13 +796,15 @@ GridAnalysis.prototype.constructFlow = function()
 		var n_1 = snapshotCount < 2 ? 0 : i/(snapshotCount-2);
 
 		var dataIndex = Math.floor(n * (this.recordedPath.length-1));
-		var colorIndex = Math.floor(n * (SNAPSHOT_COLORS.length-1));
+		var colorIndex = Math.floor(n_1 * (FLOW_SNAPSHOT_COLORS.length-1));
+		var pattern = this.recordedPath[dataIndex];
 
-		snapshots.push({
-			timeseries: this.recordedPath[ dataIndex ],
-			color: i < snapshotCount-1 ? SNAPSHOT_COLORS[ colorIndex ] : undefined
-		});
+		var snapshot = pattern;
+		snapshot.index = dataIndex;
+		snapshot.color = i < snapshotCount-1 ? FLOW_SNAPSHOT_COLORS[ colorIndex ] : undefined;
+		snapshots.push(snapshot);
 	}
+	this.snapshots = snapshots;
 
 	return snapshots;	
 }
@@ -1102,7 +1129,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				{
 					d3.select("#heatmapTimeseriesPopup").remove();
 					grid.brushCells([]);
-				}, 100);
+				}, 75);
 			});
 		grid.heatmapSelection = selection;
 
@@ -1246,7 +1273,7 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 			// unbrush the MDS points
 			grid.mds.brushPoints();
 
-		}, 100);
+		}, 75);
 	})(this, cluster);
 }
 

@@ -17,7 +17,8 @@ var MATRIX_COLOR_SCALE =
 	//['#f7f7f7','#d9d9d9','#bdbdbd','#969696','#737373','#525252','#252525'].reverse();
 
 	// grey to red
-	['#b2182b','#ef8a62','#fddbc7','#ffffff','#e0e0e0','#999999','#4d4d4d'].reverse();
+	//['#b2182b','#ef8a62','#fddbc7','#ffffff','#e0e0e0','#999999','#4d4d4d'].reverse();
+	['#ca0020','#f4a582','#ffffff','#bababa','#404040'].reverse();	// same as above but fewer classes
 
 function SimilarityMatrix(_svg, _floatingLenses)
 {

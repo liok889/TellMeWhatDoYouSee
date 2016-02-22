@@ -19,6 +19,9 @@ var MAX_MAGIC_THRESHOLD = 0.6;
 var MIN_MAGIC_THRESHOLD = 0.0;
 var THRESHOLD_RATE = 0.005 * 0.7;
 
+// pattern path
+var PATTERN_PATH = 'rgb(96, 22, 185)'; //'#2d8659';
+var PATTERN_BRUSH = '#ffeee6';
 
 // background color for the MDS
 var MDS_BG_COLOR = "#f2f2f2";
@@ -68,6 +71,18 @@ function MDS(svg, width, height)
 	// assign background color to SVG
 	this.svg.style("background-color", MDS_BG_COLOR);
 
+	this.svg.append("defs").append("marker")
+		.attr("id", "arrowhead")
+		.attr("refX", 6 + 3-7) /*must be smarter way to calculate shift*/
+		.attr("refY", 2)
+		.attr("markerWidth", 6)
+		.attr("markerHeight", 4)
+		.attr("orient", "auto")
+		.append("path")
+			.style("fill", PATTERN_PATH)
+			.attr("d", "M 0,0 V 4 L6,2 Z");
+
+
 	// append an image
 	this.svg.append("image")
 		.attr("id", "drawingImage")
@@ -76,6 +91,11 @@ function MDS(svg, width, height)
 		.attr("y", 0)
 		.attr("width", this.w + "px")
 		.attr("height", this.h + "px");
+
+	// create sub groups for the data, brush, and pattern path
+	this.dataGroup = this.svg.append("g");
+	this.brushGroup = this.svg.append("g");
+	this.patternGroup = this.svg.append("g");
 
 	// selection mode
 	this.selectionMode = SELECTION_MODE_SQUARE;
@@ -178,17 +198,18 @@ function MDS(svg, width, height)
 	this.offscreenCanvas.width = this.w;
 	this.offscreenCanvas.height = this.h;
 	this.ctx = this.offscreenCanvas.getContext("2d");
-	this.clearCanvas();
+	this.clearPattern();
 }
 
-MDS.prototype.clearCanvas = function()
+MDS.prototype.clearPattern = function()
 {
 	this.ctx.fillStyle = MDS_BG_COLOR;
 	this.ctx.fillRect(0, 0, this.w, this.h);
-	this.ctx.fillStyle = "#ffcccc";
+	this.ctx.fillStyle = PATTERN_BRUSH;
 	
 	d3.select("#drawingImage")
 		.attr("xlink:href", this.offscreenCanvas.toDataURL());
+	this.patternGroup.selectAll("*").remove()
 }
 
 MDS.prototype.setColorMap = function(_colorMap) 
@@ -302,7 +323,7 @@ MDS.prototype.createBrush = function()
 				thisObject.brushend();
 			});
 		
-		thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
+		thisObject.brushGroup.append("g").attr("class", "brush").call(thisObject.brush);
 	})(this, gridAnalysis);
 
 }
@@ -312,7 +333,7 @@ MDS.prototype.deleteBrush = function()
 	{
 		// remove brush
 		this.brush.clear();
-		this.svg.selectAll("g.brush").remove();
+		this.brushGroup.selectAll("g.brush").remove();
 		this.brush = undefined;
 		this.brushCell = undefined;
 
@@ -329,15 +350,15 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	// remove exiting brush
 	this.deleteBrush();
 
-	var group = this.svg.selectAll("g.mdsPointGroup");
+	var group = this.dataGroup.selectAll("g.mdsPointGroup");
 
 	// create a new <g> for the MDS points
 	if (group.size() == 0) {
-		group = this.svg.append("g")
+		group = this.dataGroup.append("g")
 			.attr("class", "mdsPointGroup");
 	}
-	var pathGroup = this.svg.selectAll("g.mdsPathGroup").remove();
-	pathGroup = this.svg.append('g').attr('class', 'mdsPathGroup');
+	var pathGroup = this.dataGroup.selectAll("g.mdsPathGroup").remove();
+	pathGroup = this.dataGroup.append('g').attr('class', 'mdsPathGroup');
 
 	// classical MDS projection	
 	var positions = mdsPositions || this.classic(distances, dimensions);
@@ -556,8 +577,8 @@ MDS.prototype.drawConvexHull = function(clusters)
 {
 
 	// remove existing hull group
-	this.svg.selectAll("g.mdsConvexHullGroup").remove();
-	var group = this.svg.append("g")
+	this.dataGroup.selectAll("g.mdsConvexHullGroup").remove();
+	var group = this.dataGroup.append("g")
 		.attr("class", "mdsConvexHullGroup");
 
 	var convexHulls = [];
@@ -600,13 +621,13 @@ MDS.prototype.drawConvexHull = function(clusters)
 
 MDS.prototype.clearBubbleSets = function()
 {
-	this.svg.selectAll("g.mdsBubbleSets").remove();	
+	this.dataGroup.selectAll("g.mdsBubbleSets").remove();	
 }
 
 MDS.prototype.drawBubbleSets = function(clusters)
 {
-	this.svg.selectAll("g.mdsBubbleSets").remove();
-	var group = this.svg.append("g")
+	this.dataGroup.selectAll("g.mdsBubbleSets").remove();
+	var group = this.dataGroup.append("g")
 		.attr("class", "mdsBubbleSets");
 
 	// create positions
@@ -865,10 +886,10 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	var brushedSelection;
 	if (!hasNotMoved) 
 	{
-		brushedSelection = (function(brushed, ids, svg) 
+		brushedSelection = (function(brushed, ids, group) 
 		{
 			
-			var selection = svg.selectAll("circle");
+			var selection = group.selectAll("circle.mdsCircle");
 			var brushedSelection = selection.filter(function (d) 
 			{
 				var p = d.getPixelCoordinate();
@@ -889,7 +910,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 			});
 			return brushedSelection;
 			
-		})(brushedPoints, brushedIDs, this.svg);
+		})(brushedPoints, brushedIDs, this.dataGroup);
 
 		// draw the extent of the brush on the canvas
 		if (this.grid.isRecording()) {
@@ -906,7 +927,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	}
 
 	// de-highlight all points
-	this.svg.selectAll("circle").style("fill", "");
+	this.dataGroup.selectAll("circle.mdsCircle").style("fill", "");
 
 	// highlight only the brushed selection
 	brushedSelection.style("fill", BRUSH_COLOR);
@@ -928,7 +949,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 }
 
 // propagates brush event to other components of the visualization
-MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
+MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints, skipPattern)
 {
 	// brush explorer pane
 	var avgTimeseries = this.grid.brushExplore( brushedIDs );
@@ -945,8 +966,74 @@ MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
 	this.applyColorMap(brushedIDs);
 
 	// capture "flow"
-	if (this.grid.isRecording()) {
-		this.grid.captureFlow( avgTimeseries );
+	if (this.grid.isRecording() && !skipPattern) 
+	{
+		var flow = this.grid.captureFlow( avgTimeseries, { 
+			brushExtent: this.brush ? this.brush.extent() : undefined,
+			brushedIDs: brushedIDs,
+			brushedPoints: brushedPoints
+		});
+		
+		// highlight snapshots
+		var g = this.patternGroup.select("g.patternSnapshots");
+		if (g.size() == 0) {
+			g = this.patternGroup.append("g").attr("class", "patternSnapshots");
+		}
+		g.selectAll("*").remove();
+
+		if (this.selectionMode == SELECTION_MODE_SQUARE) 
+		{
+			// create connecting path
+			var patternPathLine = g.select("path.patternPathLine");
+			var pathGenerator = d3.svg.line()
+				.x(X).y(Y).interpolate("cardinal");
+			
+			if (patternPathLine.size() == 0) 
+			{
+				patternPathLine = g.append("path")
+					.attr("class", "patternPathLine")
+					.style("fill", "none")
+					.style("stroke", PATTERN_PATH)
+					.style("stroke-width", "3px")
+					.attr("marker-end", "url(#arrowhead)");
+					//.attr("filter", "url(#f3)"); 
+			}
+			patternPathLine
+				.attr("d", pathGenerator(flow.snapshots));
+
+			(function(group, mds, snapshots, patternPath) 
+			{
+				var updateSelection = group.selectAll("circle.patternPathCircle")
+					.data(snapshots.slice(0, snapshots.length-1));
+
+				// add circles
+				updateSelection.enter().append("circle")
+					.attr("class", "patternPathCircle")
+					.style("fill", PATTERN_PATH)
+					.style("stroke", "#cccccc")
+					.style("stroke-width", "1px")
+					.attr("r", "5")
+					.on("mouseenter", function(d) 
+					{
+						mds.brushPoints(d.brushedIDs);
+						mds.propagateBrushEvent(d.brushedIDs, d.brushedPoints, true);
+					})
+					.on("mouseout", function(d) {
+						mds.brushPoints([]);
+						mds.propagateBrushEvent([], [], true);
+					});
+
+				updateSelection
+					.attr("cx", X)
+					.attr("cy", Y);
+
+				updateSelection.exit().remove();
+
+			})(g, this, flow.snapshots, flow.patternPath);
+
+			function X(d) { return (d.brushExtent[0][0] + d.brushExtent[1][0])/2; }
+			function Y(d) { return (d.brushExtent[0][1] + d.brushExtent[1][1])/2; }
+		}
 	}
 }
 
@@ -954,7 +1041,7 @@ MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints)
 MDS.prototype.brushend = function() 
 {
 	if (this.brush && this.brush.empty()) {
-		this.svg.selectAll("circle").style("fill", "");		
+		this.dataGroup.selectAll("circle.mdsCircle").style("fill", "");		
 		this.applyColorMap();
 		d3.select("#imgAddSelection").style("visibility", "hidden");
 	}
