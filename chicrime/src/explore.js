@@ -708,6 +708,7 @@ SignalVis.prototype.showSignalSnapshots = function(snapshots)
 		{
 			putNodeOnTop(this);
 			d3.select(this)
+				.style("stroke", "#666666")
 				.style("stroke-width", 1.0)
 				.style("stroke-opacity", 0.7)
 				.style("fill-opacity", 1.0);
@@ -727,6 +728,7 @@ SignalVis.prototype.showSignalSnapshots = function(snapshots)
 		{
 			pathSelection.order();
 			d3.select(this)
+				.style("stroke", "")
 				.style("stroke-width", "")
 				.style("stroke-opacity", "")
 				.style("fill-opacity", "");
