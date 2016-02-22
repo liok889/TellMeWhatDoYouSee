@@ -13,8 +13,8 @@ var SIGNAL_EDIT = 3;
 // ==========
 SIGNAL_SEPARATION = 15;
 SIGNAL_PAD = 11;
-SIGNAL_W = 565;
-SIGNAL_H = 170;
+SIGNAL_W = 665;
+SIGNAL_H = 200;
 SIGNAL_H_PAD = 15;
 SIGNAL_W_PAD = 10;
 SIGNAL_X_OFFSET = 25;
@@ -729,7 +729,7 @@ SignalVis.prototype.showSignalSnapshots = function(snapshots)
 			d3.select(this)
 				.style("stroke-width", "")
 				.style("stroke-opacity", "")
-				.style("stroke-opacity", "");
+				.style("fill-opacity", "");
 			gridAnalysis.brushSelectionTimeout = setTimeout(function() {
 				gridAnalysis.brushSelectionMembers([], undefined);
 			}, 0);
