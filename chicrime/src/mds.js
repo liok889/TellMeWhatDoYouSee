@@ -442,7 +442,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 
 		// attach invisible paths to it
 		pathGroup.selectAll("path").data(paths).enter().append("path")
-			.attr("d", function(d) { return "M" + d.join(",") + "Z";})
+			.attr("d", function(d, i) { return d !== undefined ? "M" + d.join(",") + "Z" : "";})
 			.style("fill", "white")
 			.style("fill-opacity", "0.0")
 			.style("stroke", "none")
