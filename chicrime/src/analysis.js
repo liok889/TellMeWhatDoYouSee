@@ -11,10 +11,16 @@ var SHOW_MDS = 1;
 var SHOW_SMALL_MULTIPATTERNS = 2;
 
 // pattern flow parameters
-var FLOW_SNAPSHOT_COUNT = 6;
 var FLOW_SNAPSHOT_COLORS = 
-	['#fef0d9','#fdcc8a','#fc8d59','#e34a33','#b30000'];
+	// beige to red
+	['#fdcc8a','#fc8d59','#e34a33','#b30000'];
+
+	//['#fef0d9','#fdcc8a','#fc8d59','#e34a33','#b30000'];
+
+	// purple hue
+	//['#fbb4b9','#f768a1','#c51b8a','#7a0177'];
 	//['#fee5d9','#fcae91','#fb6a4a','#de2d26','#a50f15'];
+var FLOW_SNAPSHOT_COUNT = FLOW_SNAPSHOT_COLORS.length+1;
 
 function GridAnalysis(theMap, svgExplore)
 {
@@ -735,6 +741,8 @@ GridAnalysis.prototype.startRecording = function()
 	this.flow = [];
 	this.explore.showFlow({ snapshots: [], patternPath: [] });
 	this.mds.clearPattern();
+	this.showFlowHeatmap([]);
+
 }
 GridAnalysis.prototype.stopRecording = function()
 {
@@ -769,6 +777,9 @@ GridAnalysis.prototype.captureFlow = function(timeseries, additionalData)
 			snapshots: this.generateSnapshots(),
 			patternPath: this.recordedPath
 		};
+
+		// show in the heatmap
+		this.showFlowHeatmap(flow.snapshots);
 
 		// show it in the exploration pane
 		this.explore.showFlow(flow);
@@ -900,7 +911,7 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 
 			grid.heatmapSelection.filter(function(d) {
 				return !hm.get(d.cell[0] + "_" + d.cell[1]);
-			}).transition().duration(120)
+			}).transition().duration(100)
 				.style("fill-opacity", function(d) {
 					return 0.0;
 				});
@@ -973,6 +984,90 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 			return colorScale( (distances[index] + 0) );
 		})
 	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
+}
+
+GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
+{
+	if (Array.isArray(snapshots) && snapshots.length >= 2)
+	{
+		var diffMap = d3.map();
+
+		// derive a diff array between snapshots[i] and snapshots[i+1]	
+		// this would contains IDs added as a result of moving from i to i+1
+		for (var i=0, N=snapshots.length; i<N-1; i++) 
+		{
+			
+			var s1 = snapshots[i];
+			var s2 = snapshots[i+1];
+
+			var ids1 = s1.brushedIDs, ids2 = s2.brushedIDs;
+			var map1 = s1.idMap; if (!map1) { map1 = mapArray(ids1); s1.idMap = map1; }
+			var map2 = s2.idMap; if (!map2) { map2 = mapArray(ids2); s2.idMap = map2; }
+
+			var diffList = [];
+			(function(_map1, _map2, _diffList, _diffMap, color) {
+				_map2.forEach(function(key, value) 
+				{
+					if (value && !_map1.get(key)) 
+					{
+						_diffList.push(key);
+						_diffMap.set(key, color);
+					}
+				});
+			})(map1, map2, diffList, diffMap, s1.color);
+
+			if (i==0) 
+			{
+				// for first snapshot, add items in 0
+				(function(_ids1, _diffMap, _diffList, color) 
+				{
+					var added = 0;
+					for (var j=0, N=_ids1.length; j<N; j++)
+					{
+						var id = _ids1[j];
+						if (!_diffMap.get(id))
+						{
+							_diffMap.set(id, color);
+							_diffList.push(id);
+							added++;
+						}
+					}
+				})(ids1, diffMap, diffList, s1.color);
+			}
+		}
+
+		// apply color / set to heatmap
+		(function(grid, diffMap)
+		{
+			grid.heatmapSelection.each(function(d) {
+
+				var color = diffMap.get(cellToStr(d.cell));
+				if (color) 
+				{
+					d3.select(this)
+						.style("visibility", "visible")
+						.style("fill", color);
+				}
+				else
+				{
+					d3.select(this)
+						.style("visibility", "hidden");
+				}
+			});
+		})(this, diffMap);
+		s1.diffMap = diffMap;
+		s1.diffList = diffList;
+	}
+	else
+	{
+		// restore normal heatmap
+		(function(grid)
+		{
+			grid.heatmapSelection
+				.style("fill", function(d) { return grid.colorScale(grid.logScale(d.nValue+1)); })
+				.style("visibility", "");
+		})(this);
+	}
 }
 
 GridAnalysis.prototype.brushMatrixElements = function(brushedIDs, translate)
@@ -1127,6 +1222,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				d3.select(this).attr("class", "");
 				grid.brushCellTimeout = setTimeout(function() 
 				{
+					grid.brushCellTimeout = undefined;
 					d3.select("#heatmapTimeseriesPopup").remove();
 					grid.brushCells([]);
 				}, 75);

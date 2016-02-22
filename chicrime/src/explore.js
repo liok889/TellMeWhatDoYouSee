@@ -719,7 +719,7 @@ SignalVis.prototype.showSignalSnapshots = function(snapshots)
 				clearTimeout(gridAnalysis.brushSelectionTimeout);
 				gridAnalysis.brushSelectionTimeout = undefined;
 			}
-			gridAnalysis.brushSelectionMembers(d.snapshots[0].brushedIDs, d.ts[0]);
+			gridAnalysis.brushSelectionMembers(d.snapshots[0].brushedIDs.concat(d.snapshots[1].brushedIDs), d.ts[0]);
 
 		});
 
@@ -732,9 +732,13 @@ SignalVis.prototype.showSignalSnapshots = function(snapshots)
 				.style("stroke-width", "")
 				.style("stroke-opacity", "")
 				.style("fill-opacity", "");
+			gridAnalysis.explore.brushDataPoints([]);
+		
 			gridAnalysis.brushSelectionTimeout = setTimeout(function() {
 				gridAnalysis.brushSelectionMembers([], undefined);
-			}, 0);
+				gridAnalysis.brushSelectionTimeout = undefined;
+			}, 75);
+			
 		});
 	})(selection);
 
