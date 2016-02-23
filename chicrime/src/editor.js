@@ -173,9 +173,15 @@ SignalEditor.prototype.mousedrag = function(mouse)
 		// do the adjustment
 		for (var r=range[0]; r<=range[1]; r++) 
 		{
-			var ppN = 1.0 - Math.max(0, Math.min(1, Math.abs(rangeMiddle-r) / this.selectionRange));
-			ppN *= pN
-			series[r] += ppN;
+			if (this.selectionRange > 2) {
+				var ppN = 1.0 - Math.max(0, Math.min(1, Math.abs(rangeMiddle-r) / this.selectionRange));
+				ppN *= pN
+				series[r] += ppN;
+			}
+			else
+			{
+				series[r] += pN;
+			}
 		}
 	}
 
