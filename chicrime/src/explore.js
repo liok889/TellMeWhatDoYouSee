@@ -871,7 +871,7 @@ SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 	else
 	{
 		
-		var diff = A.clone().subtract(B);
+		var diff = B.clone().subtract(A);
 		var diffSeries = diff.getSeries();
 		
 		// build a new different
@@ -1260,7 +1260,10 @@ Explore.prototype.brushDataPoints = function(points)
 Explore.prototype.showFlow = function(flow)
 {
 	var snapshots = flow.snapshots;
-	for (var i=0, N=this.signalList.length; i<N; i++) 
+
+	// show only on the last signal viewer
+	var start = this.signalList.length-1;
+	for (var i=start, N=this.signalList.length; i<N; i++) 
 	{
 		this.signalList[i].showSignalSnapshots(snapshots);
 	}
@@ -1268,21 +1271,3 @@ Explore.prototype.showFlow = function(flow)
 
 Explore.COLS = 1;
 Explore.ROWS = 2;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-

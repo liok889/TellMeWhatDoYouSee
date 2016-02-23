@@ -620,6 +620,10 @@ GridAnalysis.prototype.getTimeseriesSize = function()
 	return timeseries.size();
 }
 
+GridAnalysis.prototype.getMaxDistance = function()
+{
+	return 2*this.getTimeseriesSize();
+}
 GridAnalysis.prototype.getMaxTimeseriesDistance = function()
 {
 	// max timeseries distance (based on EDR; M+N)
@@ -964,13 +968,14 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 			maxD = distanceList[i];
 		}
 	}
-	console.log("\tDistance profile: " + minD + ", " + maxD);
+	//console.log("\tDistance profile: " + minD + ", " + maxD);
 
 
 	// make color scale
 	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
 	//var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
-	var DISTANCE_COLOR = ['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
+	var DISTANCE_COLOR = ['#fef0d9'].concat(FLOW_SNAPSHOT_COLORS); 
+		//['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
 
 	var _logScale = d3.scale.log().domain([1, (maxDistance ? maxDistance : maxD)+1]).range([0, 1]);
 	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);

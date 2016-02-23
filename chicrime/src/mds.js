@@ -539,7 +539,7 @@ MDS.prototype.pickMagicPoint = function(i)
 				return false;
 			}
 		});
-	})(this, ts, this.grid.getMaxTimeseriesDistance(), brushedIDs, brushedPoints, magicPoint, WORK);
+	})(this, ts, this.grid.getMaxDistance(), brushedIDs, brushedPoints, magicPoint, WORK);
 
 	// brush this cell
 	pickedPoints.style("fill", BRUSH_COLOR);
