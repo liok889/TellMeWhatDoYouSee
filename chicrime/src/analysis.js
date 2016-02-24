@@ -6,6 +6,9 @@
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
+// mouse down indicator
+var MOUSEDOWN = false;
+
 // two modes
 var SHOW_MDS = 1;
 var SHOW_SMALL_MULTIPATTERNS = 2;
@@ -1339,10 +1342,12 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 				if (d.getValue() <= 1) return 0.0; else return HEATMAP_OPACITY;
 			})
 			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : 'geoRect'})
+			.on("mousedown", function(d) { MOUSEDOWN = true; d3.select("#heatmapTimeseriesPopup").remove(); })
+			.on("mouseup", function() { MOUSEDOWN = false; })
 			.on("mouseenter", function(d, i) 
 			{
 				var ts = d.getTimeseries();
-				if (ts && ts.size() > 1) 
+				if (ts && ts.size() > 1 && !MOUSEDOWN) 
 				{
 					// cancel unbrush timeout if any
 					if (grid.brushCellTimeout) 
