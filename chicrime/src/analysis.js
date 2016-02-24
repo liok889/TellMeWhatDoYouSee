@@ -516,18 +516,29 @@ GridAnalysis.prototype.getGeoRect = function(c) {
 }
 
 
-function GeoRect(_nValue, _timeseries, cell, _tL, _bR) {
+function GeoRect(_nValue, _timeseries, cell, _tL, _bR) 
+{
 	this.nValue = _nValue;
 	this.timeseries = _timeseries;
 	this.tL = _tL;
 	this.bR = _bR;
 	this.cell = cell;
+
+	this.internalX = d3.scale.linear().domain([-2, 2]).range([_tL.lng, _bR.lng]);
+	this.internalY = d3.scale.linear().domain([-2, 2]).range([_tL.lat, _bR.lat]);
+	this.internalPaths = [];
 }
 
+GeoRect.prototype.clearInternalPaths = function() {
+	this.internalPaths = [];
+}
+
+GeoRect.prototype.addInternalPath = function(pathSelection) {
+	this.internalPaths.push(pathSelection);
+}
 GeoRect.prototype.getCell = function() {
 	return this.cell;
 }
-
 
 GeoRect.prototype.getValue = function() {
 	return this.nValue;
@@ -537,11 +548,37 @@ GeoRect.prototype.getTimeseries = function() {
 	return this.timeseries;
 }
 
-GeoRect.prototype.projectSelfPath = function()
+GeoRect.prototype.projectSelfPath = function(justInternals)
 {
-	var ptL = theMap.latLngToContainerPoint(this.tL)
-	var pbR = theMap.latLngToContainerPoint(this.bR)
-	return "M" + ptL.x + "," + ptL.y + " " + pbR.x + "," + ptL.y + " " + pbR.x + "," + pbR.y + " " + ptL.x + "," + pbR.y + " Z";
+	// project internal paths
+	for (var i=0, N=this.internalPaths.length; i<N; i++) 
+	{	
+		(function(pathSelection, geoRect) 
+		{
+			pathSelection
+				.attr("d", function(points) 
+				{
+					var projected = []; projected.length = points.length;
+					for (var j=0, M=points.length; j<M; j++) 
+					{
+						var p = points[j];
+						var pProjected = theMap.latLngToContainerPoint({ lng: geoRect.internalX(p[0]), lat: geoRect.internalY(p[1]) });
+						projected[j] = pProjected.x + "," + pProjected.y;
+					}
+					return "M" + projected.join(" ");
+				});
+		})(this.internalPaths[i], this);
+	}
+
+	if (!justInternals)
+	{
+		// project my outline
+		var ptL = theMap.latLngToContainerPoint(this.tL)
+		var pbR = theMap.latLngToContainerPoint(this.bR)
+		this.midpoint = [0.5 * (ptL.x+pbR.x), 0.5 * (ptL.y+pbR.y)];
+
+		return "M" + ptL.x + "," + ptL.y + " " + pbR.x + "," + ptL.y + " " + pbR.x + "," + pbR.y + " " + ptL.x + "," + pbR.y + " Z";
+	}
 }
 
 GridAnalysis.GRAPH_W = 175;
@@ -624,10 +661,9 @@ GridAnalysis.prototype.getMaxDistance = function()
 {
 	return 2*this.getTimeseriesSize();
 }
-GridAnalysis.prototype.getMaxTimeseriesDistance = function()
+GridAnalysis.prototype.getDistanceMatrix = function()
 {
-	// max timeseries distance (based on EDR; M+N)
-	return 2*this.getTimeseriesSize();
+	return this.analysisResults.distanceMatrix;
 }
 
 GridAnalysis.prototype.getRequestKey = function()
@@ -991,11 +1027,26 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
 }
 
+var ARROW_ROTATION = {
+	'-1': {'-1': 225, '0': 180, '1': 135},
+	'0':  {'-1': 270, '0': null, '1': 90},
+	'1': {'-1': 315, '0': 0, '1': 45}
+};
+
+var ARROW_path1 = [ [-1.5, 0], [1.5, 0] ];
+var ARROW_path2 = [ [0.5 , 1], [1.5, 0], [0.5, -1] ];
+
 GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
 {
 	if (Array.isArray(snapshots) && snapshots.length >= 2)
 	{
 		var diffMap = d3.map();
+
+		// clear any previous arrows
+		/*
+		svg.selectAll(".geoRect").each(function(d) { d.clearInternalPaths(); });
+		svg.select("#heatmap").selectAll("g.arrowGroup").remove();
+		*/
 
 		// derive a diff array between snapshots[i] and snapshots[i+1]	
 		// this would contains IDs added as a result of moving from i to i+1
@@ -1010,7 +1061,10 @@ GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
 			var map2 = s2.idMap; if (!map2) { map2 = mapArray(ids2); s2.idMap = map2; }
 
 			var diffList = [];
-			(function(_map1, _map2, _diffList, _diffMap, color) {
+			var exitList = [];
+			var neighborMap = d3.map();
+
+			(function(_map1, _map2, _diffList, _diffMap, _exitList, _neighborMap, color) {
 				_map2.forEach(function(key, value) 
 				{
 					if (value && !_map1.get(key)) 
@@ -1019,7 +1073,100 @@ GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
 						_diffMap.set(key, color);
 					}
 				});
-			})(map1, map2, diffList, diffMap, s1.color);
+
+				// exit list
+				_map1.forEach(function(key, value)
+				{
+					if (!_map2.get(key)) 
+					{
+						// add to exit list
+						_exitList.push(key);
+						
+						// look for neighbors
+						var cell = strToCell(key);
+						var neighborList = [];
+						for (var i=-1; i<=1; i++) 
+						{
+							for (var j=-1; j<=1; j++) 
+							{
+								if (i != 0 || j != 0) 
+								{
+									var neighbor = ([cell[0]+i, cell[1]+j]);
+									if (_map2.get(cellToStr(neighbor))) 
+									{
+										neighborList.push(neighbor);
+									}
+								}
+							}
+						}
+						_neighborMap.set(key, neighborList);
+					}
+				});
+
+			})(map1, map2, diffList, diffMap, exitList, neighborMap, s1.color);
+
+			// resolve neighbors for exit lists
+			/*
+			var distanceMatrix = this.getDistanceMatrix();
+			var exitElements = [];
+
+			for (var j=0, M=exitList.length; j<M; j++) 
+			{
+				var exitID = exitList[j];
+				var exitCell = strToCell(exitID);
+				var I = this.ij2index[exitCell[0]][exitCell[1]];
+				var neighbors = neighborMap.get(exitID);
+				if (neighbors.length > 0) 
+				{
+					var J = this.ij2index[neighbors[0][0]][neighbors[0][1]];
+					var minD = distanceMatrix[I][J];
+					for (var k=1, K=neighbors.length; k<K; k++) 
+					{
+						var J_1 = this.ij2index[neighbors[k][0]][neighbors[k][1]];
+						var D_1 = distanceMatrix[I][J_1];
+						if (D_1 < minD) {
+							J = J_1;
+							minD = D_1;
+						}
+					}
+
+					var nextCell = this.index2ij[J];
+					var angle = [nextCell[0]-exitCell[0], nextCell[1]-exitCell[1]];
+					var rotation = ARROW_ROTATION[angle[0]][angle[1]];
+					exitElements.push( 
+					{
+						exitCell: exitCell,
+						arrowRotation: rotation,
+						geoRect: this.getGeoRect(exitCell)
+					});
+					//console.log("\tarrow rotation: " + rotation);
+				}
+				else
+				{
+					// no neighboring cell to move to
+					//console.log("\tneighbor list zero for cell: " + exitID);
+				}
+			}
+
+			// make arrows
+			var arrowGroup = svg.select("#heatmap").selectAll("g.arrowGroup").data(exitElements);
+
+			// bind to arrow data
+			arrowGroup.enter().append("g")
+				.attr("class", "arrowGroup");
+			
+			//attach the two paths for the arrows
+			arrowGroup.each(function(d) 
+			{
+				var pathSelection = d3.select(this).selectAll("path.flowArrow").data([ARROW_path1, ARROW_path2])
+				pathSelection.enter().append("path")
+					.attr("class", "flowArrow")
+					//.attr("transform", "rotate(" + d.arrowRotation + " " + d.geoRect.midpoint[0] + " " + d.geoRect.midpoint[1] + ")");
+				
+				d.geoRect.addInternalPath(pathSelection);
+				d.geoRect.projectSelfPath(true);
+			});
+			*/
 
 			if (i==0) 
 			{
@@ -1039,6 +1186,8 @@ GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
 					}
 				})(ids1, diffMap, diffList, s1.color);
 			}
+	
+
 		}
 
 		// apply color / set to heatmap
@@ -1189,7 +1338,7 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 			.style("fill-opacity", function(d) {
 				if (d.getValue() <= 1) return 0.0; else return HEATMAP_OPACITY;
 			})
-			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : ''})
+			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : 'geoRect'})
 			.on("mouseenter", function(d, i) 
 			{
 				var ts = d.getTimeseries();

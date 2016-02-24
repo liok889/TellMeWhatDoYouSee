@@ -211,6 +211,13 @@
 			stroke-opacity: 0.5;
 			fill-opacity: 0.5;	
 		}
+
+		.flowArrow
+		{
+			stroke: black;
+			stroke-width: 1.5px;
+			fill: none;
+		}
 	</style>
 
 </head>
@@ -663,6 +670,10 @@
 			geo.offset = getMapOffset();
 			geodata.push(geo);
 			if (name) geoNames[name] = geo;
+		}
+		function removeGeoObject(name)
+		{
+
 		}
 
 		function translateGeoData()
