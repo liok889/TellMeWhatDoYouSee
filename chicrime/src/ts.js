@@ -353,6 +353,10 @@ Timeseries.prototype.distanceEDR = function(anotherSeries)
 	return (M+N) - theMax;
 }
 
+// use EDR as default distance function
+Timeseries.prototype.distance = Timeseries.prototype.distanceEDR;
+
+
 function getEpsilonGrid(nR)
 {
 	var G = []; G.length = EPSILON_GRID;

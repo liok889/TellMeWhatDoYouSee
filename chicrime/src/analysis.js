@@ -45,6 +45,9 @@ function GridAnalysis(theMap, svgExplore)
 	var gExplore = this.svgExplore.append("g");
 	this.explore = new Explore(gExplore, {xOffset: exploreOffset.left, yOffset: exploreOffset.top});
 
+	// stats
+	this.stats = new ClusterStats(d3.select("#svgStats"));
+
 	// initialize callbacks for explore pane
 	(function(grid) 
 	{
@@ -933,6 +936,53 @@ GridAnalysis.prototype.brushSelectionMembers = function(ids, avgTimeseries)
 	// explorer
 	this.explore.brushDataPoints(avgTimeseries !== undefined ? [{ timeseries: avgTimeseries}] : []);
 
+	// stats
+	this.stats.drawClusterStats(ids, avgTimeseries);
+}
+
+GridAnalysis.prototype.mdsBrush = function(ids, avgTimeseries)
+{
+	if (ids && ids.length > 0 && avgTimeseries)
+	{
+		var seqID = []; seqID.length = ids.length;
+		for (var i=0, N=ids.length; i<N; i++) 
+		{
+			var idi = ids[i];
+			if (isNaN(idi))
+			{
+				var cell = strToCell(idi);
+				var seq = this.ij2index[cell[0]][cell[1]];
+				seqID[i] = seq;
+			}
+			else
+			{
+				seqID[i] = idi;
+			}
+		}
+
+		(function(thisGrid, seqID, avgTimeseries) 
+		{
+			if (thisGrid.clusterStatsTimeout) {
+				clearTimeout(thisGrid.clusterStatsTimeout);
+				thisGrid.clusterStatsTimeout = undefined;
+			}
+			
+			thisGrid.clusterStatsTimeout = setTimeout(function() 
+			{
+				thisGrid.stats.clusterStatsTimeout = undefined;
+				thisGrid.stats.drawClusterStats(seqID, avgTimeseries);
+			}, 30);
+
+		})(this, seqID, avgTimeseries);
+	}
+	else
+	{
+		if (this.clusterStatsTimeout) {
+			clearTimeout(this.clusterStatsTimeout);
+			this.clusterStatsTimeout = undefined;
+		}
+		this.stats.drawClusterStats();
+	}
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
@@ -1484,7 +1534,11 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 	}
 
 	// brush explore pane
-	this.explore.brushDataPoints(dataPoints);
+	var avgTimeseries = this.explore.brushDataPoints(dataPoints);
+
+	// stats
+	this.stats.drawClusterStats(cluster.members, avgTimeseries);
+
 
 	// brush dendogram
 	this.simMatrix.highlightCluster(cluster, BRUSH_COLOR);
@@ -1508,6 +1562,9 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 
 	// unbrush explore pane
 	this.explore.brushDataPoints([]);
+
+	// stats
+	this.stats.drawClusterStats();
 
 	// unbrush dendogram
 	this.simMatrix.unhighlightCluster(cluster);

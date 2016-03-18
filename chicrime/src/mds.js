@@ -945,6 +945,9 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	{
 		this.propagateBrushEvent( brushedIDs, brushedPoints )
 	}
+	else
+	{
+	}
 	return brushedIDs;
 }
 
@@ -957,6 +960,9 @@ MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints, skipPatt
 	// brush the heatmap and the matrix
 	this.grid.highlightHeatmapCell(brushedPoints, true);
 	this.grid.brushMatrixElements( brushedIDs, true );
+
+	// brush points
+	this.grid.mdsBrush(brushedIDs, avgTimeseries);
 
 	// store a list of MDS points we brushed
 	this.brushedMDSPoints = brushedPoints;
