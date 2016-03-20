@@ -53,6 +53,62 @@ Selection.prototype.updateMemberList = function(newMembers)
 		this.pathG.selectAll("path.selectionCurve").transition()
 			.attr("d", pathGenerator(this.avgTimeseries.getSeries()));
 	}
+
+	
+	if (this.mapThumb)
+	{
+		var mdsPoints = gridAnalysis.mds.getAllPoints();
+		var cells = []; cells.length = this.members.length;
+		var pixels = []; pixels.length = this.members.length;
+
+		for (var i=0, N=this.members.length; i<N; i++) 
+		{
+			var id = this.members[i].id;
+			var cell;
+			if (isNaN(id)) 
+			{
+				cell = strToCell(id);
+			} 
+			else 
+			{
+				cell = gridAnalysis.index2ij[i];
+			}
+			cells[i] = cell;
+			var pIndex = gridAnalysis.ij2index[cell[0]][cell[1]];
+			var point = mdsPoints[pIndex];
+
+			pixels[i] = [
+				1+point.nCoordinate[0] * (this.MDS_THUMB_W-2),
+				1+point.nCoordinate[1] * (this.MDS_THUMB_H-2)
+			];
+		}
+
+		(function(cellSize, pixelSize, mapThumb, mdsThumb, cells, pixels) 
+		{
+			var update = mapThumb.selectAll("rect.mapThumb").data(cells);
+			update.enter().append("rect")
+				.attr("class", "mapThumb")
+				.style("fill", "#333333").style("stroke", "none");
+			update
+				.attr("width", cellSize).attr("height", cellSize)
+				.attr("x", function(d) { return d[1] * cellSize; })
+				.attr("y", function(d) { return d[0] * cellSize; });
+			update.exit().transition().duration(150).style("fill-opacity", "0.0").remove();
+
+			var update2 = mdsThumb.selectAll("circle.mdsThumb").data(pixels);
+			update2.enter().append("circle")
+				.attr("class", "mdsThumb")
+				.style("fill", "#333333").style("stroke", "none").style("fill-opacity", 0.75);
+			update2
+				.attr("r", 0.5)
+				.attr("cx", function(d) { return d[0]; })
+				.attr("cy", function(d) { return d[1]; });
+			update2.exit().transition().duration(150).style("fill-opacity", "0.0").remove();
+
+		
+
+		})(this.squareDim, this.circleDim, this.mapThumb, this.mdsThumb, cells, pixels);
+	}
 };
 
 Selection.prototype.getContentContainer = function()
@@ -69,10 +125,55 @@ Selection.prototype.populateSelection = function(g)
 		.attr("width", ClusterSelector.RECT_W)
 		.attr("height", ClusterSelector.RECT_H)
 		.attr("fill", this.color || ClusterSelector.LAST_COLOR)
-		.attr("fill-opacity", "0.6")
-		.attr("rx", 3.5)
-		.attr("ry", 3.5)
+		.attr("fill-opacity", "0.4")
+		.attr("rx", 3.5).attr("ry", 3.5)
 		.attr("stroke", "");
+
+
+	// add a map
+	if (ClusterSelector.SHOW_MAP_THUMB) 
+	{
+		// figure out dimensions for the thumbs
+		var gridDims = gridAnalysis.getGridDims();
+		var mdsDims = gridAnalysis.mds.getDims();
+
+		var MAP_THUMB_H = ClusterSelector.RECT_H;
+		var MAP_THUMB_W = MAP_THUMB_H * (550/820);
+
+		var MDS_THUMB_H = ClusterSelector.RECT_H;
+		var MDS_THUMB_W = .8* MAP_THUMB_H * (mdsDims[0] / mdsDims[1]);
+		this.MDS_THUMB_W = MDS_THUMB_W;
+		this.MDS_THUMB_H = MDS_THUMB_H;
+
+		this.squareDim = MAP_THUMB_H / gridDims.rows;
+		this.circleDim = 1.5
+
+		this.mapThumb = this.content.append("g")
+			.attr("transform", "translate(" + (-MAP_THUMB_W -ClusterSelector.MAP_THUMB_OFFSET) + ",0)");
+		this.mapThumb.append("rect")
+			.attr("x", 1).attr("y", 1)
+			.attr("width", MAP_THUMB_W-2)
+			.attr("height", MAP_THUMB_H-2)
+			.style("fill", "#eeeeee").style("stroke", "#aaaaaa").style("stroke-width", "0.5px")
+			.attr("rx", 3.5).attr("ry", 3.5);
+
+		this.mdsThumb = this.content.append("g")
+			.attr("transform", "translate(" + (-MAP_THUMB_W -2*ClusterSelector.MAP_THUMB_OFFSET -MDS_THUMB_W) + ",0)");
+		this.mdsThumb.append("rect")
+			.attr("x", 1).attr("y", 1)
+			.attr("width", MDS_THUMB_W-2)
+			.attr("height", MDS_THUMB_H-2)
+			.style("fill", "#eeeeee").style("stroke", "#aaaaaa").style("stroke-width", "0.5px")
+			.attr("rx", 3.5).attr("ry", 3.5);
+
+		this.rect = this.content.append("rect")
+			.attr("x", -MAP_THUMB_W -2*ClusterSelector.MAP_THUMB_OFFSET -MDS_THUMB_W)
+			.attr("y", 0)
+			.attr("height", ClusterSelector.RECT_H)
+			.attr("width", MAP_THUMB_W + 2*ClusterSelector.MAP_THUMB_OFFSET + MDS_THUMB_W + ClusterSelector.RECT_W)
+			.attr("rx", 2.5).attr("ry", 2.5)
+			.style("fill", "none").style("stroke", "none");
+	}
 
 	// this will draw the average time series
 	this.updateMemberList();
@@ -91,6 +192,7 @@ Selection.prototype.populateSelection = function(g)
 			.attr("y", 2)
 			.attr("width", imgH)
 			.attr("height", imgH)
+			.style("opacity", 0.3)
 			.on("click", function() 
 			{
 				thisSelection.parentSelector.removeSelection(thisSelection);
@@ -300,6 +402,13 @@ ClusterSelector.prototype.getSelectionOffset = function(selection)
 	}
 }
 
+ClusterSelector.prototype.drawSelectionStats = function(index)
+{
+	var selection = this.selections[index];
+	if (selection) {
+		this.grid.stats.drawClusterStats(selection.getMembers(), selection.getTimeseries());
+	}
+}
 ClusterSelector.prototype.getSelectionIndex = function(selection)
 {
 	for (var i=0, N=this.selections.length; i<N; i++) {
@@ -553,7 +662,9 @@ ClusterSelector.DEFAULT_COLORS = ['#fdbf6f', '#a6cee3','#b2df8a','#cab2d6','#1f7
 ClusterSelector.SELECTION_COLORS = null;
 ClusterSelector.LAST_COLOR = '#d9d9d9';
 ClusterSelector.RECT_W = 120;
-ClusterSelector.RECT_H = 35;
+ClusterSelector.RECT_H = 40;
 ClusterSelector.RECT_PAD = 3;
-ClusterSelector.RECT_OFFSET = 2;
+ClusterSelector.RECT_OFFSET = 6;
+ClusterSelector.MAP_THUMB_OFFSET = 1;
+ClusterSelector.SHOW_MAP_THUMB = true;
 

@@ -35,7 +35,7 @@ function GridAnalysis(theMap, svgExplore)
 	this.svgExplore = svgExplore;
 
 	// create a selection object
-	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8);
+	var xOffset = +this.svgExplore.attr("width") - (1*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8) + 3;
 	var yOffset = ClusterSelector.RECT_OFFSET + 12;
 	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
@@ -191,6 +191,20 @@ GridAnalysis.prototype.switchMDSPanel = function(view)
 	}
 }
 
+GridAnalysis.prototype.calcVariability = function()
+{
+	var avgTimeseries = new Timeseries();
+
+	for (var i=0, N=this.getTimeseriesCount(); i<N; i++) 
+	{
+		avgTimeseries.add(this.getTimeseries(i));
+		
+	}
+	avgTimeseries.normalize();
+	this.stats.drawClusterStats(d3.range(this.getTimeseriesCount()), avgTimeseries);
+
+}
+
 GridAnalysis.prototype.initGrids = function(w, h, minGridLineCount, maxGridLineCount)
 {
 	// map to store all grid
@@ -291,6 +305,13 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 	};
 
 	return this.analysisRequest;
+}
+
+GridAnalysis.prototype.getGridDims = function() {
+	return {
+		cols: this.analysisRequest.gridCols,
+		rows: this.analysisRequest.gridRows
+	};
 }
 
 GridAnalysis.prototype.setRangeLimit = function(range) {
@@ -489,10 +510,23 @@ GridAnalysis.prototype.kMedoids = function()
 
 	// assign colors to clusters, and make new selections from them
 	var colorSets = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999'];
+	
+	// sort the clusters based on the number of members
+	this.kClusters.sort(function(a, b) { return b.members.length-a.members.length; });
+
+	// populate clusters in to selections
 	for (var i=0, K=this.kClusters.length; i<K; i++) 
 	{
-		this.kClusters[i].color = colorSets[ Math.min(i, colorSets.length-1) ];
-		this.makeBrushSelection( this.kClusters[i].members, /*this.kClusters[i].color*/ null );
+		var kCluster = this.kClusters[i];
+		kCluster.color = colorSets[ Math.min(i, colorSets.length-1) ];
+		
+		// translate cluster members to actual IDs
+		var ids = []; ids.length = kCluster.members.length;
+		for (var j=0, N=ids.length; j<N; j++) 
+		{
+			ids[j] = cellToStr(this.index2ij[kCluster.members[j]]);
+		}
+		this.makeBrushSelection( ids, null );
 	}
 
 	this.mds.clearBubbleSets();
@@ -937,7 +971,7 @@ GridAnalysis.prototype.brushSelectionMembers = function(ids, avgTimeseries)
 	this.explore.brushDataPoints(avgTimeseries !== undefined ? [{ timeseries: avgTimeseries}] : []);
 
 	// stats
-	this.stats.drawClusterStats(ids, avgTimeseries);
+	this.stats.drawClusterStats(matrixIDs, avgTimeseries);
 }
 
 GridAnalysis.prototype.mdsBrush = function(ids, avgTimeseries)

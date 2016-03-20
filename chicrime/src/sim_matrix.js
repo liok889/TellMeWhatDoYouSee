@@ -6,7 +6,8 @@
 var SIMMAT_ELEMENT_SIZE = 20;
 var SIMMAT_ELEMENT_BORDER = "#eeeeee";
 var DENDOGRAM_NODE_HEIGHT = SIMMAT_ELEMENT_SIZE/2;
-var DENDOGRAM_COLOR = "#959595";
+var DENDOGRAM_COLOR = "#757575";
+var DENDOGRAM_STROKE_WIDTH = "0.5px";
 
 var MATRIX_COLOR_SCALE = 
 	
@@ -655,7 +656,7 @@ SimilarityMatrix.prototype.drawDendogram = function(cluster, limit)
 				.attr("x2", function(d) { return d.x2} )
 				.attr("y2", function(d) { return d.y2} )
 				.attr("stroke", DENDOGRAM_COLOR)
-				.attr("stroke-width", "1px")
+				.attr("stroke-width", DENDOGRAM_STROKE_WIDTH)
 				.on("mouseover", function() 
 				{
 					if (thisMatrix.clusterBrushCallback) {

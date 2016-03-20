@@ -3,7 +3,7 @@
  * =============================
  */
 
-var STATS_BIN_COUNT = 20;
+var STATS_BIN_COUNT = 30;
 var CHART_W = 80;
 var CHART_H = 40;
 var STATS_BIN_WIDTH = CHART_W / STATS_BIN_COUNT;

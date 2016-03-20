@@ -105,6 +105,7 @@ function activateButtons(buttonCallbacks, padding)
       var b = buttonCallbacks[i];
       d3.select("#" + b.id)
         .style("padding", padding || "2px")
+        .style("opacity", b.opacity || 0.8)
         .on("click", b.callback || null)
         .on("dblclick", b.dblCallback || null)
         .on("mouseover", function() { 

@@ -469,6 +469,16 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	this.mdsPoints = points;
 }
 
+MDS.prototype.getAllPoints = function()
+{
+	return this.mdsPoints;
+}
+
+MDS.prototype.getDims = function()
+{
+	return [this.w, this.h];
+}
+
 MDS.prototype.pickMagicPoint = function(i)
 {
 	var MAX_GEOM_DISTANCE = null; //Math.pow(100,2);
