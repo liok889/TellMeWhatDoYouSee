@@ -2,11 +2,28 @@
  * Grid-based analysis
  * ============================================
  */
+// heatmap
 var HEATMAP_COLOR = ['#a50026','#d73027','#f46d43','#fdae61','#fee090','#ffffbf','#e0f3f8','#abd9e9','#74add1','#4575b4','#313695'].reverse();
 var HEATMAP_OPACITY = 0.75;
 
+// mouse down indicator
+var MOUSEDOWN = false;
+
+// two modes
 var SHOW_MDS = 1;
 var SHOW_SMALL_MULTIPATTERNS = 2;
+
+// pattern flow parameters
+var FLOW_SNAPSHOT_COLORS = 
+	// beige to red
+	['#fdcc8a','#fc8d59','#e34a33','#b30000'];
+
+	//['#fef0d9','#fdcc8a','#fc8d59','#e34a33','#b30000'];
+
+	// purple hue
+	//['#fbb4b9','#f768a1','#c51b8a','#7a0177'];
+	//['#fee5d9','#fcae91','#fb6a4a','#de2d26','#a50f15'];
+var FLOW_SNAPSHOT_COUNT = FLOW_SNAPSHOT_COLORS.length+1;
 
 function GridAnalysis(theMap, svgExplore)
 {
@@ -18,7 +35,7 @@ function GridAnalysis(theMap, svgExplore)
 	this.svgExplore = svgExplore;
 
 	// create a selection object
-	var xOffset = +this.svgExplore.attr("width") - (2*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8);
+	var xOffset = +this.svgExplore.attr("width") - (1*ClusterSelector.RECT_OFFSET + ClusterSelector.RECT_W + ClusterSelector.RECT_H/2-8) + 3;
 	var yOffset = ClusterSelector.RECT_OFFSET + 12;
 	var gSelector = this.svgExplore.append("g").attr("transform", "translate(" + xOffset + "," + yOffset + ")");
 	this.selector = new ClusterSelector(gSelector, this, [xOffset, yOffset]);
@@ -28,11 +45,14 @@ function GridAnalysis(theMap, svgExplore)
 	var gExplore = this.svgExplore.append("g");
 	this.explore = new Explore(gExplore, {xOffset: exploreOffset.left, yOffset: exploreOffset.top});
 
+	// stats
+	this.stats = new ClusterStats(d3.select("#svgStats"));
+
 	// initialize callbacks for explore pane
 	(function(grid) 
 	{
-		grid.selector.setSelectionBrushCallback(function(ids) {
-			grid.brushSelectionMembers(ids);
+		grid.selector.setSelectionBrushCallback(function(ids, avgTimeseries) {
+			grid.brushSelectionMembers(ids, avgTimeseries);
 		});
 	
 		grid.selector.setDragCallback(
@@ -114,6 +134,22 @@ function GridAnalysis(theMap, svgExplore)
 
 				}
 			},
+			{
+				id: "imgMagicSelection",
+				callback: function() 
+				{
+					thisGrid.mds.setSelectionMode(SELECTION_MODE_MAGIC);
+					toggleButton(d3.select(this), ["imgSquareSelection"]);
+				}
+			},
+			{
+				id: "imgSquareSelection",
+				callback: function() 
+				{
+					thisGrid.mds.setSelectionMode(SELECTION_MODE_SQUARE);
+					toggleButton(d3.select(this), ["imgMagicSelection"]);
+				}
+			},
 
 			{
 				id: "imgAddSelection", 
@@ -126,6 +162,7 @@ function GridAnalysis(theMap, svgExplore)
 
 		activateButtons(buttonCallbacks);
 		toggleButton("imgShowMDS");
+		toggleButton("imgSquareSelection");
 
 	})(this);
 }
@@ -152,6 +189,54 @@ GridAnalysis.prototype.switchMDSPanel = function(view)
 
 		break;
 	}
+}
+
+GridAnalysis.prototype.calcVariability = function()
+{
+	var avgTimeseries = new Timeseries();
+
+	for (var i=0, N=this.getTimeseriesCount(); i<N; i++) 
+	{
+		avgTimeseries.add(this.getTimeseries(i));
+		
+	}
+	avgTimeseries.normalize();
+	this.stats.drawClusterStats(d3.range(this.getTimeseriesCount()), avgTimeseries);
+
+}
+
+GridAnalysis.prototype.initGrids = function(w, h, minGridLineCount, maxGridLineCount)
+{
+	// map to store all grid
+	this.allGrids = d3.map();
+
+	// move map to default center / zoom-level
+	var center = this.map.getCenter();
+	var zoom = this.map.getZoom();
+	this.map.setView(DEFAULT_CENTER, DEFAULT_ZOOM);
+
+	for (var i=minGridLineCount; i<=maxGridLineCount; i++)
+	{
+		var cellSize = h / i;
+		var gridRows = Math.ceil(h / cellSize);
+		var gridCols = Math.ceil(w / cellSize);
+
+		var rows = d3.range(1*cellSize, gridRows*cellSize, cellSize * (1.0-GRID_OVERLAP));
+		var cols = d3.range(1*cellSize, gridCols*cellSize, cellSize * (1.0-GRID_OVERLAP));
+				
+		// construct the grid
+		var grid = this.constructGrid(cellSize, cellSize, rows.length+1, cols.length+1, GRID_OVERLAP);
+		this.allGrids.set(i, grid);
+	}
+
+	// restore
+	this.map.setView(center, zoom);
+}
+
+
+GridAnalysis.prototype.loadGrid = function(gridLineCount)
+{
+	this.analysisRequest = this.allGrids.get(gridLineCount);
 }
 
 GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, overlap)
@@ -217,6 +302,15 @@ GridAnalysis.prototype.constructGrid = function(pCellW, pCellH, rows, cols, over
 		cellOffset: cellOffset,
 		gridCols: cols,
 		gridRows: rows,
+	};
+
+	return this.analysisRequest;
+}
+
+GridAnalysis.prototype.getGridDims = function() {
+	return {
+		cols: this.analysisRequest.gridCols,
+		rows: this.analysisRequest.gridRows
 	};
 }
 
@@ -364,11 +458,13 @@ GridAnalysis.prototype.data_ready = function()
 		console.log("* hclustering and matrix view found in cache.")
 		clustering.setHierarchicalClusters(cached.clusteringResults);
 	}
+	/*
 	else if (analysisResults.hclusters) 
 	{
 		// hierarchical clustering already done by server
 		clustering.setHierarchicalClusters( analysisResults.hclusters )
 	}
+	*/
 	else {
 		// do clustering
 		clustering.hierarchical();
@@ -398,7 +494,7 @@ GridAnalysis.prototype.data_ready = function()
 	this.drawMDS();
 
 	// Small-Multipatterns
-	this.smallMultipatterns.makeSimpleLayout(7, 6);
+	this.smallMultipatterns.makeSimpleLayout(9, 6);
 
 	// activate view
 	this.switchMDSPanel();
@@ -414,10 +510,23 @@ GridAnalysis.prototype.kMedoids = function()
 
 	// assign colors to clusters, and make new selections from them
 	var colorSets = ['#e41a1c','#377eb8','#4daf4a','#984ea3','#ff7f00','#ffff33','#a65628','#f781bf','#999999'];
+	
+	// sort the clusters based on the number of members
+	this.kClusters.sort(function(a, b) { return b.members.length-a.members.length; });
+
+	// populate clusters in to selections
 	for (var i=0, K=this.kClusters.length; i<K; i++) 
 	{
-		this.kClusters[i].color = colorSets[ Math.min(i, colorSets.length-1) ];
-		this.makeBrushSelection( this.kClusters[i].members, /*this.kClusters[i].color*/ null );
+		var kCluster = this.kClusters[i];
+		kCluster.color = colorSets[ Math.min(i, colorSets.length-1) ];
+		
+		// translate cluster members to actual IDs
+		var ids = []; ids.length = kCluster.members.length;
+		for (var j=0, N=ids.length; j<N; j++) 
+		{
+			ids[j] = cellToStr(this.index2ij[kCluster.members[j]]);
+		}
+		this.makeBrushSelection( ids, null );
 	}
 
 	this.mds.clearBubbleSets();
@@ -438,7 +547,7 @@ GridAnalysis.prototype.getTimeseriesCount = function()
 
 GridAnalysis.prototype.getTimeseries = function(index) 
 {
-	var cell = Array.isArray(index) ? index : this.analysisResults.tsIndex[index];
+	var cell = Array.isArray(index) ? index : typeof index === "string" ? strToCell(index) : this.analysisResults.tsIndex[index];
 	return this.getGeoRect(cell).getTimeseries();
 }
 
@@ -447,18 +556,29 @@ GridAnalysis.prototype.getGeoRect = function(c) {
 }
 
 
-function GeoRect(_nValue, _timeseries, cell, _tL, _bR) {
+function GeoRect(_nValue, _timeseries, cell, _tL, _bR) 
+{
 	this.nValue = _nValue;
 	this.timeseries = _timeseries;
 	this.tL = _tL;
 	this.bR = _bR;
 	this.cell = cell;
+
+	this.internalX = d3.scale.linear().domain([-2, 2]).range([_tL.lng, _bR.lng]);
+	this.internalY = d3.scale.linear().domain([-2, 2]).range([_tL.lat, _bR.lat]);
+	this.internalPaths = [];
 }
 
+GeoRect.prototype.clearInternalPaths = function() {
+	this.internalPaths = [];
+}
+
+GeoRect.prototype.addInternalPath = function(pathSelection) {
+	this.internalPaths.push(pathSelection);
+}
 GeoRect.prototype.getCell = function() {
 	return this.cell;
 }
-
 
 GeoRect.prototype.getValue = function() {
 	return this.nValue;
@@ -468,11 +588,37 @@ GeoRect.prototype.getTimeseries = function() {
 	return this.timeseries;
 }
 
-GeoRect.prototype.projectSelfPath = function()
+GeoRect.prototype.projectSelfPath = function(justInternals)
 {
-	var ptL = theMap.latLngToContainerPoint(this.tL)
-	var pbR = theMap.latLngToContainerPoint(this.bR)
-	return "M" + ptL.x + "," + ptL.y + " " + pbR.x + "," + ptL.y + " " + pbR.x + "," + pbR.y + " " + ptL.x + "," + pbR.y + " Z";
+	// project internal paths
+	for (var i=0, N=this.internalPaths.length; i<N; i++) 
+	{	
+		(function(pathSelection, geoRect) 
+		{
+			pathSelection
+				.attr("d", function(points) 
+				{
+					var projected = []; projected.length = points.length;
+					for (var j=0, M=points.length; j<M; j++) 
+					{
+						var p = points[j];
+						var pProjected = theMap.latLngToContainerPoint({ lng: geoRect.internalX(p[0]), lat: geoRect.internalY(p[1]) });
+						projected[j] = pProjected.x + "," + pProjected.y;
+					}
+					return "M" + projected.join(" ");
+				});
+		})(this.internalPaths[i], this);
+	}
+
+	if (!justInternals)
+	{
+		// project my outline
+		var ptL = theMap.latLngToContainerPoint(this.tL)
+		var pbR = theMap.latLngToContainerPoint(this.bR)
+		this.midpoint = [0.5 * (ptL.x+pbR.x), 0.5 * (ptL.y+pbR.y)];
+
+		return "M" + ptL.x + "," + ptL.y + " " + pbR.x + "," + ptL.y + " " + pbR.x + "," + pbR.y + " " + ptL.x + "," + pbR.y + " Z";
+	}
 }
 
 GridAnalysis.GRAPH_W = 175;
@@ -494,12 +640,16 @@ function drawTimeseries(timeseries, group)
 	}
 
 	// create a rectangle to serve as the background of the linechart
-	group.append("rect")
-		.attr("width", GridAnalysis.GRAPH_W+10)
-		.attr("height", GridAnalysis.GRAPH_H+10)
-		.attr("x", "-5")
-		.attr("y", "-5")
-		.style("fill", "white");
+	var rectSelect = group.select("rect");
+	if (rectSelect.size() == 0) 
+	{
+		rectSelect = group.append("rect")
+			.attr("width", GridAnalysis.GRAPH_W+10)
+			.attr("height", GridAnalysis.GRAPH_H+10)
+			.attr("x", "-5")
+			.attr("y", "-5")
+			.style("fill", "white");
+	}
 
 	// create a line projection to show the shape of the heatmap
 	var lineFunction = d3.svg.line()
@@ -507,18 +657,17 @@ function drawTimeseries(timeseries, group)
 		.y(function(d, i) { return (1.0-d.y) * GridAnalysis.GRAPH_H; })
 		.interpolate("linear");
 
-	// create a line projection
-	var zeroHeightLineFunction = d3.svg.line()
-		.x(function(d, i) { return d.x * GridAnalysis.GRAPH_W; })
-		.y(function(d, i) { return GridAnalysis.GRAPH_H; })
-		.interpolate("cardinal");
 
 	// path drawing the actual line chart
-	group.append("path")
-		.attr("d", lineFunction(data))
-		.attr("stroke", "black")
-		.style("stroke-width", "1px")
-		.style("fill", "none");
+	var pathSelect = group.select("path");
+	if (pathSelect.size() == 0)
+	{
+		pathSelect = group.append("path")
+			.attr("stroke", "black")
+			.style("stroke-width", "1px")
+			.style("fill", "none");
+	}
+	pathSelect.attr("d", lineFunction(data));
 }
 
 GridAnalysis.prototype.drawMDS = function()
@@ -538,6 +687,23 @@ GridAnalysis.prototype.drawMDS = function()
 	if (!this.analysisResults.mdsPositions) {
 		console.log("MDS projection took: " + ((processTime/1000).toFixed(1)) + " seconds.");
 	}
+}
+
+// returns the size (length) of the first time series 
+// (we assume that all series have the same length)
+GridAnalysis.prototype.getTimeseriesSize = function()
+{
+	var timeseries = this.getTimeseries(0);
+	return timeseries.size();
+}
+
+GridAnalysis.prototype.getMaxDistance = function()
+{
+	return 2*this.getTimeseriesSize();
+}
+GridAnalysis.prototype.getDistanceMatrix = function()
+{
+	return this.analysisResults.distanceMatrix;
 }
 
 GridAnalysis.prototype.getRequestKey = function()
@@ -562,17 +728,13 @@ GridAnalysis.prototype.getRequestKey = function()
 		if (query.crimeType) {
 			theKey += query.crimeType;
 		}
-		return theKey;
+
+		return theKey + "_" + GRID_LINE_COUNT;
 	}
 	else
 	{
 		return null;
 	}
-}
-
-GridAnalysis.prototype.drawSmallMultipatterns = function()
-{
-	this.smallMultipatterns.make
 }
 
 GridAnalysis.prototype.renderSimMatrix = function(hcluster)
@@ -648,13 +810,103 @@ GridAnalysis.prototype.renderSimMatrix = function(hcluster)
 	this.onscreenCanvas.getContext("2d").drawImage(this.offscreenCanvas, 0, 0);
 }
 
+GridAnalysis.prototype.isRecording = function()
+{
+	return this.recording;
+}
+GridAnalysis.prototype.startRecording = function()
+{
+	this.recording = true;
+	this.recordedPath = [];
+	this.flow = [];
+	this.explore.showFlow({ snapshots: [], patternPath: [] });
+	this.mds.clearPattern();
+	this.showFlowHeatmap([]);
+
+}
+GridAnalysis.prototype.stopRecording = function()
+{
+	this.recording = false;
+}
+
+GridAnalysis.prototype.captureFlow = function(timeseries, additionalData)
+{
+	if (this.recording) 
+	{
+		// add current time series
+		var record = {
+			timeseries: timeseries
+		};
+
+		// tag options along
+		for (var key in additionalData) {
+			// skip loop if the property is from prototype
+			if (!additionalData.hasOwnProperty(key)) {
+				continue;
+			}
+			else
+			{
+				record[key] = additionalData[key];
+			}
+		}
+
+    	this.recordedPath.push(record);
+		
+		// construct flow object
+		var flow = {
+			snapshots: this.generateSnapshots(),
+			patternPath: this.recordedPath
+		};
+
+		// show in the heatmap
+		this.showFlowHeatmap(flow.snapshots);
+
+		// show it in the exploration pane
+		this.explore.showFlow(flow);
+		return flow;
+	}
+	else
+	{
+		this.explore.showFlow({ snapshots: [], patternPath: [] });
+		return null;
+	}
+}
+
+GridAnalysis.prototype.generateSnapshots = function()
+{
+	if (this.recordedPath.length < 2) {
+		return [];
+	}
+
+	var snapshotCount = this.recordedPath.length < FLOW_SNAPSHOT_COUNT ? this.recordedPath.length : FLOW_SNAPSHOT_COUNT;
+	var snapshots = [];
+	
+	for (var i=0; i<snapshotCount; i++) 
+	{
+		var n = i/(snapshotCount-1);
+		var n_1 = snapshotCount < 2 ? 0 : i/(snapshotCount-2);
+
+		var dataIndex = Math.floor(n * (this.recordedPath.length-1));
+		var colorIndex = Math.floor(n_1 * (FLOW_SNAPSHOT_COLORS.length-1));
+		var pattern = this.recordedPath[dataIndex];
+
+		var snapshot = pattern;
+		snapshot.index = dataIndex;
+		snapshot.color = i < snapshotCount-1 ? FLOW_SNAPSHOT_COLORS[ colorIndex ] : undefined;
+		snapshots.push(snapshot);
+	}
+	this.snapshots = snapshots;
+
+	return snapshots;	
+}
+
 GridAnalysis.prototype.makeClusterSelection = function(cluster) 
 {
 	var members = [];
 	for (var i=0, N=cluster.members.length; i<N; i++) 
 	{
 		var id = cluster.members[i];
-		var rc = this.index2ij[id];
+		var rc = isNaN(id) ? strToCell(id) : this.index2ij[id];
 		var geoRect = this.getGeoRect(rc);
 
 		members.push({
@@ -674,7 +926,7 @@ GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 		for (var i=0, N=ids.length; i<N; i++) 
 		{
 			var id = ids[i];
-			var rc = this.index2ij[id];
+			var rc = isNaN(id) ? strToCell(id) : this.index2ij[id];
 			var geoRect = this.getGeoRect(rc);
 
 			members.push({
@@ -687,21 +939,84 @@ GridAnalysis.prototype.makeBrushSelection = function(ids, ownColor)
 	}
 }
 
-GridAnalysis.prototype.brushSelectionMembers = function(ids)
+GridAnalysis.prototype.brushSelectionMembers = function(ids, avgTimeseries)
 {
 	// get cell ids for brushed cells
-	var cells = [];
-	for (var i=0, N=ids.length; i<N; i++) {
-		var cell = this.index2ij[ids[i]];
-		cells.push(cell);
+	var cells = []; cells.length = ids.length;
+	for (var i=0, N=ids.length; i<N; i++) 
+	{
+		var index = ids[i];
+		var cell = isNaN(index) ? strToCell(index) : this.index2ij[index];
+		cells[i] = cell;
 	}
 	this.highlightHeatmapCell(cells);
 
+	// translate ids to matrix indices
+	var actualIDs = []; actualIDs.length = cells.length;
+	var matrixIDs = []; matrixIDs.length = cells.length;
+	for (var i=0, N=cells.length; i<N; i++) 
+	{
+		var cell = cells[i];
+		actualIDs[i] = cellToStr(cell);
+		matrixIDs[i] = this.ij2index[cell[0]][cell[1]];
+	}
+
 	// matrix
-	this.brushMatrixElements(ids);
+	this.brushMatrixElements(matrixIDs);
 
 	// MDS
-	this.mds.brushPoints(ids);
+	this.mds.brushPoints(actualIDs);
+
+	// explorer
+	this.explore.brushDataPoints(avgTimeseries !== undefined ? [{ timeseries: avgTimeseries}] : []);
+
+	// stats
+	this.stats.drawClusterStats(matrixIDs, avgTimeseries);
+}
+
+GridAnalysis.prototype.mdsBrush = function(ids, avgTimeseries)
+{
+	if (ids && ids.length > 0 && avgTimeseries)
+	{
+		var seqID = []; seqID.length = ids.length;
+		for (var i=0, N=ids.length; i<N; i++) 
+		{
+			var idi = ids[i];
+			if (isNaN(idi))
+			{
+				var cell = strToCell(idi);
+				var seq = this.ij2index[cell[0]][cell[1]];
+				seqID[i] = seq;
+			}
+			else
+			{
+				seqID[i] = idi;
+			}
+		}
+
+		(function(thisGrid, seqID, avgTimeseries) 
+		{
+			if (thisGrid.clusterStatsTimeout) {
+				clearTimeout(thisGrid.clusterStatsTimeout);
+				thisGrid.clusterStatsTimeout = undefined;
+			}
+			
+			thisGrid.clusterStatsTimeout = setTimeout(function() 
+			{
+				thisGrid.stats.clusterStatsTimeout = undefined;
+				thisGrid.stats.drawClusterStats(seqID, avgTimeseries);
+			}, 30);
+
+		})(this, seqID, avgTimeseries);
+	}
+	else
+	{
+		if (this.clusterStatsTimeout) {
+			clearTimeout(this.clusterStatsTimeout);
+			this.clusterStatsTimeout = undefined;
+		}
+		this.stats.drawClusterStats();
+	}
 }
 
 GridAnalysis.prototype.highlightHeatmapCell = function(cells)
@@ -715,22 +1030,30 @@ GridAnalysis.prototype.highlightHeatmapCell = function(cells)
 		}
 
 		(function(hm, grid) {
-			grid.heatmapSelection
+			
+			grid.heatmapSelection.filter(function(d) {
+				return hm.get(d.cell[0] + "_" + d.cell[1]) === true;
+			}).style("fill-opacity", HEATMAP_OPACITY);
+
+
+			grid.heatmapSelection.filter(function(d) {
+				return !hm.get(d.cell[0] + "_" + d.cell[1]);
+			}).transition().duration(100)
 				.style("fill-opacity", function(d) {
-					var c = d.getCell();
-					var highlighted = hm.get(c[0] + "_" + c[1]);
-					return (highlighted ? HEATMAP_OPACITY : 0.0);
+					return 0.0;
 				});
 		})(highlightMap, this);
 	}
 	else {
 		this.heatmapSelection.style("fill-opacity", HEATMAP_OPACITY);
 	}
-}
+}	
 
 // given an example (edited) time series, plot similarity to it
 GridAnalysis.prototype.showDistanceToExample = function(example)
 {
+	var maxDistance = this.getMaxTimeseriesDistance();
+
 	if (!example) {
 		// no example provided, return display to normal
 		(function(heatmapSelection, colorScale, logScale) 
@@ -751,7 +1074,7 @@ GridAnalysis.prototype.showDistanceToExample = function(example)
 		}
 
 		// plot distance heatmap
-		this.showDistanceHeatmap( distanceList, example.size()*2 );
+		this.showDistanceHeatmap( distanceList, maxDistance );
 	}
 }
 
@@ -768,13 +1091,14 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 			maxD = distanceList[i];
 		}
 	}
-	console.log("\tDistance profile: " + minD + ", " + maxD);
+	//console.log("\tDistance profile: " + minD + ", " + maxD);
 
 
 	// make color scale
 	//var DISTANCE_COLOR = ['#f2f0f7','#dadaeb','#bcbddc','#9e9ac8','#807dba','#6a51a3','#4a1486'].reverse();
 	//var DISTANCE_COLOR = ['#b35806','#f1a340','#fee0b6','#f7f7f7','#d8daeb','#998ec3','#542788'].reverse();
-	var DISTANCE_COLOR = ['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
+	var DISTANCE_COLOR = ['#fef0d9'].concat(FLOW_SNAPSHOT_COLORS); 
+		//['#feebe2','#fcc5c0','#fa9fb5','#f768a1','#dd3497','#ae017e','#7a0177'].reverse();
 
 	var _logScale = d3.scale.log().domain([1, (maxDistance ? maxDistance : maxD)+1]).range([0, 1]);
 	var simColorScale = d3.scale.quantize().domain([0, maxD]).range(DISTANCE_COLOR);
@@ -790,9 +1114,219 @@ GridAnalysis.prototype.showDistanceHeatmap = function(distanceList, maxDistance)
 	})(this.ij2index, this.heatmapSelection, simColorScale, _logScale, distanceList);
 }
 
-GridAnalysis.prototype.brushMatrixElements = function(brushedIDs)
+var ARROW_ROTATION = {
+	'-1': {'-1': 225, '0': 180, '1': 135},
+	'0':  {'-1': 270, '0': null, '1': 90},
+	'1': {'-1': 315, '0': 0, '1': 45}
+};
+
+var ARROW_path1 = [ [-1.5, 0], [1.5, 0] ];
+var ARROW_path2 = [ [0.5 , 1], [1.5, 0], [0.5, -1] ];
+
+GridAnalysis.prototype.showFlowHeatmap = function(snapshots)
 {
-	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	if (Array.isArray(snapshots) && snapshots.length >= 2)
+	{
+		var diffMap = d3.map();
+
+		// clear any previous arrows
+		/*
+		svg.selectAll(".geoRect").each(function(d) { d.clearInternalPaths(); });
+		svg.select("#heatmap").selectAll("g.arrowGroup").remove();
+		*/
+
+		// derive a diff array between snapshots[i] and snapshots[i+1]	
+		// this would contains IDs added as a result of moving from i to i+1
+		for (var i=0, N=snapshots.length; i<N-1; i++) 
+		{
+			
+			var s1 = snapshots[i];
+			var s2 = snapshots[i+1];
+
+			var ids1 = s1.brushedIDs, ids2 = s2.brushedIDs;
+			var map1 = s1.idMap; if (!map1) { map1 = mapArray(ids1); s1.idMap = map1; }
+			var map2 = s2.idMap; if (!map2) { map2 = mapArray(ids2); s2.idMap = map2; }
+
+			var diffList = [];
+			var exitList = [];
+			var neighborMap = d3.map();
+
+			(function(_map1, _map2, _diffList, _diffMap, _exitList, _neighborMap, color) {
+				_map2.forEach(function(key, value) 
+				{
+					if (value && !_map1.get(key)) 
+					{
+						_diffList.push(key);
+						_diffMap.set(key, color);
+					}
+				});
+
+				// exit list
+				_map1.forEach(function(key, value)
+				{
+					if (!_map2.get(key)) 
+					{
+						// add to exit list
+						_exitList.push(key);
+						
+						// look for neighbors
+						var cell = strToCell(key);
+						var neighborList = [];
+						for (var i=-1; i<=1; i++) 
+						{
+							for (var j=-1; j<=1; j++) 
+							{
+								if (i != 0 || j != 0) 
+								{
+									var neighbor = ([cell[0]+i, cell[1]+j]);
+									if (_map2.get(cellToStr(neighbor))) 
+									{
+										neighborList.push(neighbor);
+									}
+								}
+							}
+						}
+						_neighborMap.set(key, neighborList);
+					}
+				});
+
+			})(map1, map2, diffList, diffMap, exitList, neighborMap, s1.color);
+
+			// resolve neighbors for exit lists
+			/*
+			var distanceMatrix = this.getDistanceMatrix();
+			var exitElements = [];
+
+			for (var j=0, M=exitList.length; j<M; j++) 
+			{
+				var exitID = exitList[j];
+				var exitCell = strToCell(exitID);
+				var I = this.ij2index[exitCell[0]][exitCell[1]];
+				var neighbors = neighborMap.get(exitID);
+				if (neighbors.length > 0) 
+				{
+					var J = this.ij2index[neighbors[0][0]][neighbors[0][1]];
+					var minD = distanceMatrix[I][J];
+					for (var k=1, K=neighbors.length; k<K; k++) 
+					{
+						var J_1 = this.ij2index[neighbors[k][0]][neighbors[k][1]];
+						var D_1 = distanceMatrix[I][J_1];
+						if (D_1 < minD) {
+							J = J_1;
+							minD = D_1;
+						}
+					}
+
+					var nextCell = this.index2ij[J];
+					var angle = [nextCell[0]-exitCell[0], nextCell[1]-exitCell[1]];
+					var rotation = ARROW_ROTATION[angle[0]][angle[1]];
+					exitElements.push( 
+					{
+						exitCell: exitCell,
+						arrowRotation: rotation,
+						geoRect: this.getGeoRect(exitCell)
+					});
+					//console.log("\tarrow rotation: " + rotation);
+				}
+				else
+				{
+					// no neighboring cell to move to
+					//console.log("\tneighbor list zero for cell: " + exitID);
+				}
+			}
+
+			// make arrows
+			var arrowGroup = svg.select("#heatmap").selectAll("g.arrowGroup").data(exitElements);
+
+			// bind to arrow data
+			arrowGroup.enter().append("g")
+				.attr("class", "arrowGroup");
+			
+			//attach the two paths for the arrows
+			arrowGroup.each(function(d) 
+			{
+				var pathSelection = d3.select(this).selectAll("path.flowArrow").data([ARROW_path1, ARROW_path2])
+				pathSelection.enter().append("path")
+					.attr("class", "flowArrow")
+					//.attr("transform", "rotate(" + d.arrowRotation + " " + d.geoRect.midpoint[0] + " " + d.geoRect.midpoint[1] + ")");
+				
+				d.geoRect.addInternalPath(pathSelection);
+				d.geoRect.projectSelfPath(true);
+			});
+			*/
+
+			if (i==0) 
+			{
+				// for first snapshot, add items in 0
+				(function(_ids1, _diffMap, _diffList, color) 
+				{
+					var added = 0;
+					for (var j=0, N=_ids1.length; j<N; j++)
+					{
+						var id = _ids1[j];
+						if (!_diffMap.get(id))
+						{
+							_diffMap.set(id, color);
+							_diffList.push(id);
+							added++;
+						}
+					}
+				})(ids1, diffMap, diffList, s1.color);
+			}
+	
+
+		}
+
+		// apply color / set to heatmap
+		(function(grid, diffMap)
+		{
+			grid.heatmapSelection.each(function(d) {
+
+				var color = diffMap.get(cellToStr(d.cell));
+				if (color) 
+				{
+					d3.select(this)
+						.style("visibility", "visible")
+						.style("fill", color);
+				}
+				else
+				{
+					d3.select(this)
+						.style("visibility", "hidden");
+				}
+			});
+		})(this, diffMap);
+		s1.diffMap = diffMap;
+		s1.diffList = diffList;
+	}
+	else
+	{
+		// restore normal heatmap
+		(function(grid)
+		{
+			grid.heatmapSelection
+				.style("fill", function(d) { return grid.colorScale(grid.logScale(d.nValue+1)); })
+				.style("visibility", "");
+		})(this);
+	}
+}
+
+GridAnalysis.prototype.brushMatrixElements = function(brushedIDs, translate)
+{
+	if (translate) 
+	{
+		var matrixIDs = []; matrixIDs.length = brushedIDs.length;
+		for (var i=0, N=brushedIDs.length; i<N; i++) {
+			var id = brushedIDs[i];
+			var cell = strToCell(id);
+			matrixIDs[i] = this.ij2index[cell[0]][cell[1]];
+		}
+		this.simMatrix.brushElements(matrixIDs, BRUSH_COLOR);
+	}
+	else
+	{
+		this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	}
 }
 
 GridAnalysis.prototype.brushExplore = function(brushedIDs)
@@ -804,7 +1338,7 @@ GridAnalysis.prototype.brushExplore = function(brushedIDs)
 			timeseries: this.getTimeseries(brushedIDs[i])
 		});
 	}
-	this.explore.brushDataPoints(timeseries);
+	return this.explore.brushDataPoints(timeseries);
 }
 
 GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
@@ -891,37 +1425,50 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 			.style("fill-opacity", function(d) {
 				if (d.getValue() <= 1) return 0.0; else return HEATMAP_OPACITY;
 			})
-			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : ''})
+			.attr('class', function(d) { return d.getValue() <= 1 ? 'delete' : 'geoRect'})
+			.on("mousedown", function(d) { MOUSEDOWN = true; d3.select("#heatmapTimeseriesPopup").remove(); })
+			.on("mouseup", function() { MOUSEDOWN = false; })
 			.on("mouseenter", function(d, i) 
 			{
 				var ts = d.getTimeseries();
-				if (ts && ts.size() > 1) 
+				if (ts && ts.size() > 1 && !MOUSEDOWN) 
 				{
+					// cancel unbrush timeout if any
+					if (grid.brushCellTimeout) 
+					{
+						clearTimeout(grid.brushCellTimeout);
+						grid.brushCellTimeout = undefined;	
+					}
+
 					var cell = d.getCell();
 					var mouse = d3.mouse(svg.node());
-					var g = overlayGroup.append('g')
-						.attr("id", "heatmapTimeseriesPopup")
-						.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
-						drawTimeseries(d.getTimeseries(), g);
-					grid.brushCellOut = undefined;
+					var g = d3.select("#heatmapTimeseriesPopup");
+					if (g.size() == 0) 
+					{
+						g = overlayGroup.append('g')
+							.attr("id", "heatmapTimeseriesPopup");
+					}
+					g.attr("transform", "translate(" + (10+mouse[0]) + "," + (mouse[1] - (GridAnalysis.GRAPH_H+10)) + ")");
+					drawTimeseries(d.getTimeseries(), g);
+					
+					// propagate event
 					grid.brushCells([ cell ]);
 				}
 
-				d3.select(this).attr("class", "strokedHeatmapCell");
-
-				// remove and append to the top
-				var n = jQuery(this);
-				n.parent().append(n.detach());
+				// put cell on top and add a stroke around this cell
+				putNodeOnTop(this);
+				d3.select(this)
+					.attr("class", "strokedHeatmapCell");
 			})
-			.on("mouseout", function() {
-				d3.select("#heatmapTimeseriesPopup").remove();
+			.on("mouseout", function() 
+			{
 				d3.select(this).attr("class", "");
-				grid.brushCellOut = true;
-				setTimeout(function() {
-					if (grid.brushCellOut) {
-						grid.brushCells([]);
-					}
-				}, 150);
+				grid.brushCellTimeout = setTimeout(function() 
+				{
+					grid.brushCellTimeout = undefined;
+					d3.select("#heatmapTimeseriesPopup").remove();
+					grid.brushCells([]);
+				}, 75);
 			});
 		grid.heatmapSelection = selection;
 
@@ -940,12 +1487,14 @@ GridAnalysis.prototype.makeHeatmap = function(heatmap, timeseries)
 
 GridAnalysis.prototype.brushCells = function(cells)
 {
-	var brushedIDs = [], dataPoints = [];
+	var actualIDs = [], matrixIDs = [], dataPoints = [];
 	for (var i=0, len=cells.length; i < len; i++)
 	{
 		var cell = cells[i];
 		var index = this.ij2index[ cell[0] ][ cell[1] ];
-		brushedIDs.push( index );
+		actualIDs.push( cellToStr(cell) );
+		matrixIDs.push( index );
+
 		dataPoints.push({
 			index: index,
 			timeseries: this.getTimeseries(index)
@@ -957,10 +1506,10 @@ GridAnalysis.prototype.brushCells = function(cells)
 	this.explore.brushDataPoints( dataPoints );
 
 	// brush similarity matrix as well
-	this.simMatrix.brushElements(brushedIDs, BRUSH_COLOR);
+	this.simMatrix.brushElements(matrixIDs, BRUSH_COLOR);
 
 	// brush MDS plot
-	this.mds.brushPoints(brushedIDs);
+	this.mds.brushPoints(actualIDs);
 }
 
 GridAnalysis.prototype.brushCluster = function(cluster) 
@@ -983,11 +1532,16 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 		var i = this.simMatrix.data2ij[cluster.members[k]];
 		if (r > i) r=i;
 		if (s < i) s=i;
-		brushedIDs.push(index);
+		
+		var id = isNaN(index) ? index : cellToStr(this.index2ij[index]);
 		dataPoints.push({
-			id: index,
+			id: id,
+			index: index,
 			timeseries: this.getTimeseries(index)
 		});
+
+		// add to brushed IDs
+		brushedIDs.push(id);
 	}
 
 	// brush the similarity matrix
@@ -1014,7 +1568,11 @@ GridAnalysis.prototype.brushCluster = function(cluster)
 	}
 
 	// brush explore pane
-	this.explore.brushDataPoints(dataPoints);
+	var avgTimeseries = this.explore.brushDataPoints(dataPoints);
+
+	// stats
+	this.stats.drawClusterStats(cluster.members, avgTimeseries);
+
 
 	// brush dendogram
 	this.simMatrix.highlightCluster(cluster, BRUSH_COLOR);
@@ -1039,6 +1597,9 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 	// unbrush explore pane
 	this.explore.brushDataPoints([]);
 
+	// stats
+	this.stats.drawClusterStats();
+
 	// unbrush dendogram
 	this.simMatrix.unhighlightCluster(cluster);
 
@@ -1058,7 +1619,7 @@ GridAnalysis.prototype.unbrushCluster = function(cluster)
 			// unbrush the MDS points
 			grid.mds.brushPoints();
 
-		}, 200);
+		}, 75);
 	})(this, cluster);
 }
 
@@ -1082,3 +1643,13 @@ function symmetrizeSimMatrix(matrix)
 	return matrix;
 }
 
+function strToCell(str)
+{
+	var tokens = str.split("_");
+	return [+tokens[0], +tokens[1]];
+}
+
+function cellToStr(cell)
+{
+	return cell[0] + "_" + cell[1];
+}

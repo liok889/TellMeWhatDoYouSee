@@ -32,11 +32,30 @@ function getParentElement(element, parent, className)
 	}
 }
 
+function mouseInContainer(coord, containerSelection)
+{
+  var w = +containerSelection.attr("width");
+  var h = +containerSelection.attr("height");
+  return (coord[0] >= 0 && coord[0] <= w &&coord[1] >= 0 && coord[1] <= h);
+}
 
 function putNodeOnTop(node)
 {
 	var n = jQuery(node);
 	n.parent().append(n.detach());
+}
+
+function mapArray(_array, _map)
+{
+  if (!_map) {
+    _map = d3.map();
+  }
+  (function(array, map) {
+    array.forEach(function(element) {
+      map.set(element, true);
+    });
+  })(_array, _map);
+  return _map
 }
 
 // left: 37, up: 38, right: 39, down: 40,
@@ -86,6 +105,7 @@ function activateButtons(buttonCallbacks, padding)
       var b = buttonCallbacks[i];
       d3.select("#" + b.id)
         .style("padding", padding || "2px")
+        .style("opacity", b.opacity || 0.8)
         .on("click", b.callback || null)
         .on("dblclick", b.dblCallback || null)
         .on("mouseover", function() { 
@@ -117,7 +137,7 @@ function getCoords(elem) { // crossbrowser version
 function toggleButton(on, offList)
 {
   var on_selection = (typeof on === "string" ? d3.select("#" + on) : on);
-  on_selection.style("background-color", '#fff5cc');
+  on_selection.style("background-color", '#ffeee6');
   if (offList) {
     for (var i=0, N=offList.length; i<N; i++) {
       var off_selection = (typeof offList[i] === "string" ? d3.select("#" + offList[i]) : offList[i]);

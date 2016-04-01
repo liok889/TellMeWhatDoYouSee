@@ -10,6 +10,21 @@ var MDS_PADDING 				= 20;
 var MDS_DOUBLE_BRUSH_OPACITY	= 0.2;
 var BUBBLE_OPACITY				= 0.15;
 
+// selection modes
+var SELECTION_MODE_SQUARE		= 1;
+var SELECTION_MODE_MAGIC		= 2;
+
+// magic selection, min/max parameters
+var MAX_MAGIC_THRESHOLD = 0.6;
+var MIN_MAGIC_THRESHOLD = 0.0;
+var THRESHOLD_RATE = 0.005 * 0.7;
+
+// pattern path
+var PATTERN_PATH = 'rgb(96, 22, 185)'; //'#2d8659';
+var PATTERN_BRUSH = '#ffeee6';
+
+// background color for the MDS
+var MDS_BG_COLOR = "#f2f2f2";
 /* =======================
  * MDSPoint
  * =======================
@@ -19,7 +34,8 @@ function MDSPoint(coordinate, cell, _index)
 {
 	this.coordinate = coordinate;
 	this.cell = cell;
-	this.id = _index;
+	this.id = cellToStr(cell);
+	this.index = _index
 }
 
 MDSPoint.prototype.getID = function() {
@@ -51,10 +67,163 @@ function MDS(svg, width, height)
 	this.w = width || +svg.attr("width");
 	this.h = height || +svg.attr("height");
 	this.colorMap = d3.map();
+
+	// assign background color to SVG
+	this.svg.style("background-color", MDS_BG_COLOR);
+
+	this.svg.append("defs").append("marker")
+		.attr("id", "arrowhead")
+		.attr("refX", 6 + 3-7) /*must be smarter way to calculate shift*/
+		.attr("refY", 2)
+		.attr("markerWidth", 6)
+		.attr("markerHeight", 4)
+		.attr("orient", "auto")
+		.append("path")
+			.style("fill", PATTERN_PATH)
+			.attr("d", "M 0,0 V 4 L6,2 Z");
+
+
+	// append an image
+	this.svg.append("image")
+		.attr("id", "drawingImage")
+		.attr("xlink:href", "")
+		.attr("x", 0)
+		.attr("y", 0)
+		.attr("width", this.w + "px")
+		.attr("height", this.h + "px");
+
+	// create sub groups for the data, brush, and pattern path
+	this.dataGroup = this.svg.append("g");
+	this.brushGroup = this.svg.append("g");
+	this.patternGroup = this.svg.append("g");
+
+	// selection mode
+	this.selectionMode = SELECTION_MODE_SQUARE;
+
+	// threshold for magic selection
+	this.magicThreshold = 0.15;
+
+
+	(function(mds) 
+	{
+		function addGuidelineCircle(mouse)
+		{
+			var MAX_R = 35;
+			var MIN_R = 10;
+
+			var threshold = mds.magicThreshold
+			var nR = (threshold-MIN_MAGIC_THRESHOLD) / (MAX_MAGIC_THRESHOLD-MIN_MAGIC_THRESHOLD);
+			var r = MIN_R + (MAX_R-MIN_R)*nR
+
+			var guideCircle = mds.svg.selectAll("circle.guide");
+			if (guideCircle.size() == 0) {
+
+				mds.svg.append("circle")
+					.attr("id", "adjustableGuideCircle")
+					.attr("class", "guide")
+					.style("pointer-events", "none")
+					.style("fill", "white")
+					.style("stroke", "#555555")
+					.style("fill-opacity", "0.7")
+					.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
+				mds.svg.append("circle")
+					.attr("class", "guide")
+					.attr("r", MAX_R)
+					.style("pointer-events", "none")
+					.style("fill", "none")
+					.style("stroke", "black")
+					.attr("stroke-dasharray", "2, 2")
+					.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
+				guideCircle = mds.svg.selectAll("circle.guide");
+
+				mds.svg.on("mousemove.circleGuide", function() 
+				{
+					var mouse = d3.mouse(this);
+					mds.svg.selectAll("circle.guide")
+						.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
+				})
+			}
+			mds.svg.select("#adjustableGuideCircle")
+				.attr("r", r)
+				.attr("cx", mouse[0]).attr("cy", mouse[1]);
+
+
+			mds.circleDate = new Date();
+
+			// add a timeout
+			if (mds.circleTimeout) {
+				clearTimeout(mds.circleTimeout);
+				mds.circleTimeout = undefined;
+			}
+
+			mds.circleTimeout = setTimeout(function() {
+				mds.svg.selectAll("circle.guide").transition().duration(150).attr("r", 0.0001).remove();
+				mds.svg.on("mousemove.circleGuide", null);
+				mds.circleTimeout = undefined;
+			}, 2000);
+		}
+
+		function mouseInSVG() {
+			var mouse = d3.mouse(mds.svg.node());
+			return (mouse[0] >= 0 && mouse[0] <= mds.w && mouse[1] >= 0 && mouse[1] <= mds.h);
+		}
+
+		// register mouse wheel event and use to adjust magicThreshold
+		d3.select(window).on("wheel.mds", function() 
+		{
+			var mouse = d3.mouse(mds.svg.node());
+			if (mds.selectionMode == SELECTION_MODE_MAGIC && mouseInSVG()) 
+			{
+				if (d3.event.deltaY < 0 && mds.magicThreshold < MAX_MAGIC_THRESHOLD) 
+				{
+					mds.magicThreshold = Math.min(MAX_MAGIC_THRESHOLD, mds.magicThreshold + THRESHOLD_RATE);
+					addGuidelineCircle(mouse);
+
+				}
+				else if (d3.event.deltaY > 0 && mds.magicThreshold > MIN_MAGIC_THRESHOLD) {
+					mds.magicThreshold = Math.max(MIN_MAGIC_THRESHOLD, mds.magicThreshold - THRESHOLD_RATE);
+					addGuidelineCircle(mouse);
+				}
+				mds.pickMagicPoint(null)
+			}
+		});
+
+	})(this);
+
+	// create an offscreen canvas
+	this.offscreenCanvas = document.createElement('canvas');
+	this.offscreenCanvas.width = this.w;
+	this.offscreenCanvas.height = this.h;
+	this.ctx = this.offscreenCanvas.getContext("2d");
+	this.clearPattern();
 }
 
-MDS.prototype.setColorMap = function(_colorMap) {
-	this.colorMap = _colorMap;
+MDS.prototype.clearPattern = function()
+{
+	this.ctx.fillStyle = MDS_BG_COLOR;
+	this.ctx.fillRect(0, 0, this.w, this.h);
+	this.ctx.fillStyle = PATTERN_BRUSH;
+	
+	d3.select("#drawingImage")
+		.attr("xlink:href", this.offscreenCanvas.toDataURL());
+	this.patternGroup.selectAll("*").remove()
+}
+
+MDS.prototype.setColorMap = function(_colorMap) 
+{
+	// translate indices in color maps to real IDs
+	this.colorMap = d3.map();
+	(function(mds, _colorMap, actualColorMap)
+	{
+		_colorMap.forEach(function(key, value) 
+		{
+			var id = isNaN(key) ? key : cellToStr(mds.grid.index2ij[key]);
+			actualColorMap.set(id, value);
+		});
+	})(this, _colorMap, this.colorMap);
 }
 
 MDS.prototype.getPoints = function() {
@@ -107,6 +276,25 @@ MDS.prototype.classic = function(distances, dimensions) {
 	});
 }
 
+MDS.prototype.setSelectionMode = function(newMode)
+{
+	var oldMode = this.selectionMode;
+	this.selectionMode = newMode;
+	
+	if (oldMode != newMode)
+	{
+		switch (newMode) 
+		{
+			case SELECTION_MODE_MAGIC:
+				this.deleteBrush();
+				break;
+			case SELECTION_MODE_SQUARE:
+				this.createBrush();
+				break;
+		}
+	}
+}
+
 
 MDS.prototype.createBrush = function()
 {
@@ -135,7 +323,7 @@ MDS.prototype.createBrush = function()
 				thisObject.brushend();
 			});
 		
-		thisObject.svg.append("g").attr("class", "brush").call(thisObject.brush);
+		thisObject.brushGroup.append("g").attr("class", "brush").call(thisObject.brush);
 	})(this, gridAnalysis);
 
 }
@@ -145,10 +333,13 @@ MDS.prototype.deleteBrush = function()
 	{
 		// remove brush
 		this.brush.clear();
-		this.svg.selectAll("g.brush").remove();
+		this.brushGroup.selectAll("g.brush").remove();
 		this.brush = undefined;
 		this.brushCell = undefined;
+
+		this.mdsPointSelection.style("fill", "");
 	}
+
 	d3.select("#imgAddSelection").style("visibility", "hidden");
 	this.brushedMDSPoints = undefined;
 	this.brushedIDs = undefined;
@@ -156,14 +347,18 @@ MDS.prototype.deleteBrush = function()
 
 MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions, gridAnalysis)
 {
-	// remove an earlier MDS group and create a new one
-	this.svg.selectAll("g.mdsPointGroup").remove();
+	// remove exiting brush
 	this.deleteBrush();
 
-	// create a new <g> for the MDS points
-	var group = this.svg.append("g")
-		.attr("class", "mdsPointGroup");
+	var group = this.dataGroup.selectAll("g.mdsPointGroup");
 
+	// create a new <g> for the MDS points
+	if (group.size() == 0) {
+		group = this.dataGroup.append("g")
+			.attr("class", "mdsPointGroup");
+	}
+	var pathGroup = this.dataGroup.selectAll("g.mdsPathGroup").remove();
+	pathGroup = this.dataGroup.append('g').attr('class', 'mdsPathGroup');
 
 	// classical MDS projection	
 	var positions = mdsPositions || this.classic(distances, dimensions);
@@ -199,6 +394,7 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	var yScale = d3.scale.linear().domain(yDomain).range([0+MDS_PADDING, this.h-MDS_PADDING]);
 
 	// set normalized / pixel coordinates
+	this.pixelPositions = []; this.pixelPositions.length= points.length;
 	for (var i=0, N=points.length; i<N; i++) {
 		var p = points[i];
 		
@@ -210,22 +406,60 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 
 		// pixel coordinate
 		p.pCoordinate = [ xScale(p.coordinate[0]), yScale(p.coordinate[1]) ];
+
+		this.pixelPositions[i] = p.pCoordinate;
 	}
 
-	(function(grid, g, dataPoints, thisObject) 
+	(function(grid, g, dataPoints, thisObject, pathGroup) 
 	{
-		// create circles
-		thisObject.mdsPointSelection = g.selectAll("circle").data(dataPoints).enter().append("circle")
+		// bind
+		var updateSelection = g.selectAll("circle")
+			.data(dataPoints, function(d) { return d.getCell()[0] + "_" + d.getCell()[1]; });
+		
+		// enter
+		updateSelection.enter().append("circle")
 			.attr("class", "mdsCircle")
 			.attr("id", function(d) { return "mds_circle_" + d.getCell()[0] + "_" + d.getCell()[1]; })
 			.attr("cx", function(d) { return d.getPixelCoordinate()[0]; })
 			.attr("cy", function(d) { return d.getPixelCoordinate()[1]; })
+			.attr("r", 0.00000001);
+
+		// update
+		updateSelection.transition().duration(350)
+			.attr("cx", function(d) { return d.getPixelCoordinate()[0]; })
+			.attr("cy", function(d) { return d.getPixelCoordinate()[1]; })
 			.attr("r", MDS_POINT_RADIUS);
-	})(gridAnalysis, group, points, this);
+
+		// exit
+		updateSelection.exit().transition().attr("r", 0.00000001).remove();
+
+		// store selection
+		thisObject.mdsPointSelection = updateSelection;
+
+		// calculate voronoi geometry to enable magic picking
+		var voronoi = d3.geom.voronoi();
+		var paths = voronoi(thisObject.pixelPositions);
+
+		// attach invisible paths to it
+		pathGroup.selectAll("path").data(paths).enter().append("path")
+			.attr("d", function(d, i) { return d !== undefined ? "M" + d.join(",") + "Z" : "";})
+			.style("fill", "white")
+			.style("fill-opacity", "0.0")
+			.style("stroke", "none")
+			.on("mouseenter", function(d, i) {
+				thisObject.pickMagicPoint(i);
+			})
+			.on("mouseout", function(d, i) {
+				thisObject.unpickMagicPoint(i);
+			});
+
+	})(gridAnalysis, group, points, this, pathGroup);
 
 	// create brush
-	this.createBrush();
-	
+	if (this.selectionMode == SELECTION_MODE_SQUARE) {
+		this.createBrush();
+	}
+
 	// store reference to GridAnalysis
 	this.grid = gridAnalysis;
 	this.positions = positions;
@@ -235,12 +469,126 @@ MDS.prototype.plotMDS = function(distances, cellIndex, dimensions, mdsPositions,
 	this.mdsPoints = points;
 }
 
+MDS.prototype.getAllPoints = function()
+{
+	return this.mdsPoints;
+}
+
+MDS.prototype.getDims = function()
+{
+	return [this.w, this.h];
+}
+
+MDS.prototype.pickMagicPoint = function(i)
+{
+	var MAX_GEOM_DISTANCE = null; //Math.pow(100,2);
+
+	if (this.selectionMode != SELECTION_MODE_MAGIC) {
+		return;
+	}
+
+	if (i === null || i === undefined) {
+		i = this.magicPoint;
+	}
+	if (i === null || i === undefined) {
+		return;
+	}
+	this.magicPoint = i;
+
+	// cancel unpick events
+	if (this.unpickTimer) {
+		clearTimeout(this.unpickTimer);
+		this.unpickTimer = undefined;
+	}
+
+	// base time series
+	var magicPoint = this.mdsPoints[i];
+	var ts = this.grid.getTimeseries(magicPoint.id); 
+	
+	// list of poinst to be ultimately brushed (based on their similarity to rs)
+	var brushedIDs = [];
+	var brushedPoints = [];
+
+	// perform similarity test on all nodes
+	var WORK = {work: 0};
+	var pickedPoints = (function(mds, ts, maxDistance, brushedIDs, brushedPoints, magicPoint, WORK)
+	{
+		function pDistanceSq(p1, p2) {
+			var pp1 = p1.pCoordinate;
+			var pp2 = p2.pCoordinate;
+			return Math.pow(pp1[0]-pp2[0], 2) + Math.pow(pp1[1]-pp2[1], 2);
+		}
+
+		return mds.mdsPointSelection.filter(function(d, i) 
+		{
+			// test geometric distance first
+			if (!MAX_GEOM_DISTANCE || pDistanceSq(magicPoint, d) < MAX_GEOM_DISTANCE)
+			{
+				var ts2 = mds.grid.getTimeseries(d.id);
+				var distance = mds.distances[d.index][magicPoint.index] / maxDistance;
+				if (distance <= mds.magicThreshold)
+				{
+					// add to lists of brushed points
+					brushedIDs.push(d.id);
+					brushedPoints.push(d);
+
+					// place node on top
+					putNodeOnTop(this);
+
+					return true;
+				}
+				else
+				{
+					d3.select(this).style("fill", "");
+					return false;
+				}
+			}
+			else
+			{
+				d3.select(this).style("fill", "");
+				return false;
+			}
+		});
+	})(this, ts, this.grid.getMaxDistance(), brushedIDs, brushedPoints, magicPoint, WORK);
+
+	// brush this cell
+	pickedPoints.style("fill", BRUSH_COLOR);
+
+	// store selection of all brushed points
+	this.brushedSelection = pickedPoints;
+	
+	// propagate brush event to the rest of the visualization
+	this.propagateBrushEvent(brushedIDs, brushedPoints);
+}
+
+MDS.prototype.unpickMagicPoint = function(i)
+{	
+	if (this.selectionMode != SELECTION_MODE_MAGIC) 
+	{
+		return;
+	}
+
+	(function(mds) 
+	{
+		mds.unpickTimer = setTimeout(function() 
+		{
+			mds.mdsPointSelection.style("fill", "");
+			
+			mds.brushedSelection = undefined;
+			mds.magicPoint = undefined;
+
+			// propagate un-brush event
+			mds.propagateBrushEvent([], []);
+		}, 50);
+	})(this)
+}
+
 MDS.prototype.drawConvexHull = function(clusters)
 {
 
 	// remove existing hull group
-	this.svg.selectAll("g.mdsConvexHullGroup").remove();
-	var group = this.svg.append("g")
+	this.dataGroup.selectAll("g.mdsConvexHullGroup").remove();
+	var group = this.dataGroup.append("g")
 		.attr("class", "mdsConvexHullGroup");
 
 	var convexHulls = [];
@@ -283,13 +631,13 @@ MDS.prototype.drawConvexHull = function(clusters)
 
 MDS.prototype.clearBubbleSets = function()
 {
-	this.svg.selectAll("g.mdsBubbleSets").remove();	
+	this.dataGroup.selectAll("g.mdsBubbleSets").remove();	
 }
 
 MDS.prototype.drawBubbleSets = function(clusters)
 {
-	this.svg.selectAll("g.mdsBubbleSets").remove();
-	var group = this.svg.append("g")
+	this.dataGroup.selectAll("g.mdsBubbleSets").remove();
+	var group = this.dataGroup.append("g")
 		.attr("class", "mdsBubbleSets");
 
 	// create positions
@@ -548,10 +896,10 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	var brushedSelection;
 	if (!hasNotMoved) 
 	{
-		brushedSelection = (function(brushed, ids, svg) 
+		brushedSelection = (function(brushed, ids, group) 
 		{
 			
-			var selection = svg.selectAll("circle");
+			var selection = group.selectAll("circle.mdsCircle");
 			var brushedSelection = selection.filter(function (d) 
 			{
 				var p = d.getPixelCoordinate();
@@ -572,7 +920,14 @@ MDS.prototype.brushmove = function(hasNotMoved)
 			});
 			return brushedSelection;
 			
-		})(brushedPoints, brushedIDs, this.svg);
+		})(brushedPoints, brushedIDs, this.dataGroup);
+
+		// draw the extent of the brush on the canvas
+		if (this.grid.isRecording()) {
+			this.ctx.fillRect(e[0][0], e[0][1], e[1][0]-e[0][0], e[1][1]-e[0][1]);
+			d3.select("#drawingImage")
+				.attr("xlink:href", this.offscreenCanvas.toDataURL());
+		}
 	}
 	else
 	{
@@ -582,7 +937,7 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	}
 
 	// de-highlight all points
-	this.svg.selectAll("circle").style("fill", "");
+	this.dataGroup.selectAll("circle.mdsCircle").style("fill", "");
 
 	// highlight only the brushed selection
 	brushedSelection.style("fill", BRUSH_COLOR);
@@ -596,28 +951,113 @@ MDS.prototype.brushmove = function(hasNotMoved)
 	}
 
 	// brush exploratin pane
-	if (brushedIDs) {
-		this.grid.brushExplore( brushedIDs );
-
-		// brush the heatmap and the matrix
-		this.grid.highlightHeatmapCell(brushedPoints, true);
-		this.grid.brushMatrixElements( brushedIDs );
-
-		// store a list of MDS points we brushed
-		this.brushedMDSPoints = brushedPoints;
-		this.brushedIDs = brushedIDs;
-
-		// apply selection color
-		this.applyColorMap(brushedIDs);
+	if (brushedIDs) 
+	{
+		this.propagateBrushEvent( brushedIDs, brushedPoints )
+	}
+	else
+	{
 	}
 	return brushedIDs;
+}
+
+// propagates brush event to other components of the visualization
+MDS.prototype.propagateBrushEvent = function(brushedIDs, brushedPoints, skipPattern)
+{
+	// brush explorer pane
+	var avgTimeseries = this.grid.brushExplore( brushedIDs );
+
+	// brush the heatmap and the matrix
+	this.grid.highlightHeatmapCell(brushedPoints, true);
+	this.grid.brushMatrixElements( brushedIDs, true );
+
+	// brush points
+	this.grid.mdsBrush(brushedIDs, avgTimeseries);
+
+	// store a list of MDS points we brushed
+	this.brushedMDSPoints = brushedPoints;
+	this.brushedIDs = brushedIDs;
+
+	// apply selection color
+	this.applyColorMap(brushedIDs);
+
+	// capture "flow"
+	if (this.grid.isRecording() && !skipPattern) 
+	{
+		var flow = this.grid.captureFlow( avgTimeseries, { 
+			brushExtent: this.brush ? this.brush.extent() : undefined,
+			brushedIDs: brushedIDs,
+			brushedPoints: brushedPoints
+		});
+		
+		// highlight snapshots
+		var g = this.patternGroup.select("g.patternSnapshots");
+		if (g.size() == 0) {
+			g = this.patternGroup.append("g").attr("class", "patternSnapshots");
+		}
+		g.selectAll("*").remove();
+
+		if (this.selectionMode == SELECTION_MODE_SQUARE) 
+		{
+			// create connecting path
+			var patternPathLine = g.select("path.patternPathLine");
+			var pathGenerator = d3.svg.line()
+				.x(X).y(Y).interpolate("cardinal");
+			
+			if (patternPathLine.size() == 0) 
+			{
+				patternPathLine = g.append("path")
+					.attr("class", "patternPathLine")
+					.style("fill", "none")
+					.style("stroke", PATTERN_PATH)
+					.style("stroke-width", "3px")
+					.attr("marker-end", "url(#arrowhead)");
+					//.attr("filter", "url(#f3)"); 
+			}
+			patternPathLine
+				.attr("d", pathGenerator(flow.snapshots));
+
+			(function(group, mds, snapshots, patternPath) 
+			{
+				var updateSelection = group.selectAll("circle.patternPathCircle")
+					.data(snapshots.slice(0, snapshots.length-1));
+
+				// add circles
+				updateSelection.enter().append("circle")
+					.attr("class", "patternPathCircle")
+					.style("fill", PATTERN_PATH)
+					.style("stroke", "#cccccc")
+					.style("stroke-width", "1px")
+					.attr("r", "5")
+					.on("mouseenter", function(d) 
+					{
+						mds.brushPoints(d.brushedIDs);
+						mds.propagateBrushEvent(d.brushedIDs, d.brushedPoints, true);
+					})
+					.on("mouseout", function(d) {
+						mds.brushPoints([]);
+						mds.propagateBrushEvent([], [], true);
+					});
+
+				updateSelection
+					.attr("cx", X)
+					.attr("cy", Y);
+
+				updateSelection.exit().remove();
+
+			})(g, this, flow.snapshots, flow.patternPath);
+
+			function X(d) { return (d.brushExtent[0][0] + d.brushExtent[1][0])/2; }
+			function Y(d) { return (d.brushExtent[0][1] + d.brushExtent[1][1])/2; }
+		}
+	}
 }
 
 // If the brush is empty, select all circles.
 MDS.prototype.brushend = function() 
 {
 	if (this.brush && this.brush.empty()) {
-		this.svg.selectAll("circle").style("fill", "");		
+		this.dataGroup.selectAll("circle.mdsCircle").style("fill", "");		
 		this.applyColorMap();
 		d3.select("#imgAddSelection").style("visibility", "hidden");
 	}

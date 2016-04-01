@@ -13,8 +13,8 @@ var SIGNAL_EDIT = 3;
 // ==========
 SIGNAL_SEPARATION = 15;
 SIGNAL_PAD = 11;
-SIGNAL_W = 565;
-SIGNAL_H = 170;
+SIGNAL_W = 680;
+SIGNAL_H = 225;
 SIGNAL_H_PAD = 15;
 SIGNAL_W_PAD = 10;
 SIGNAL_X_OFFSET = 25;
@@ -629,10 +629,11 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 			.attr("d", "");
 	}
 	
-	var path = g.select("path");
+	var path = g.select("path.brushCurve");
 	if (timeseries) {
 		var pathGenerator = timeseries.getPathGenerator(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD);
 		path.attr("d", pathGenerator( timeseries.getSeries() ));
+		putNodeOnTop(path.node());
 	}
 	else
 	{
@@ -649,6 +650,98 @@ SignalVis.prototype.updateBrushSignal = function(timeseries)
 	{
 		putNodeOnTop(g.node());
 	}
+}
+
+SignalVis.prototype.showSignalSnapshots = function(snapshots)
+{
+	var g = this.group.selectAll("g.brushSignalGroup");
+	var options = this.options;
+
+	if (g.size() == 0) 
+	{
+		g = this.group.append("g")
+			.attr("transform", "translate(" + (options.SIGNAL_X_OFFSET + options.SIGNAL_PAD) + "," + (options.SIGNAL_PAD) + ")")
+			.attr("class", "brushSignalGroup");
+	}
+
+	// remove any earlier flows
+	g.selectAll("path.flowSignal").remove();
+
+	if (!snapshots) return;
+
+	var paths = [];
+	for (var i=0, N=snapshots.length; i<N-1; i++) 
+	{
+		var s1 = snapshots[i].timeseries;
+		var s2 = snapshots[i+1].timeseries;
+
+		var pathGenerator = 
+		(function(width, height, pad, s1, s2) {
+			return (function(W, H, N, seriesMax1, seriesMax2, X, Y) 
+			{
+				return d3.svg.line()
+					.x(X || function(d, i) { return (W/(N-1)) * (i < N ? i : (N-1)-(i-N)); })
+					.y(Y || function(d, i) { return (1.0-d/(i < N ? seriesMax1 : seriesMax2)) * H; });
+		
+			})(
+				width - (pad ? 2*pad : 0), 
+				height - (pad ? 2*pad : 0), 
+				s1.size(), s1.figureMax(), s2.figureMax()
+			);
+		})(options.SIGNAL_W, options.SIGNAL_H, options.SIGNAL_PAD, s1, s2);
+
+		paths.push({
+			color: snapshots[i].color,
+			pathGenerator: pathGenerator,
+			ts: [s1, s2],
+			snapshots: [snapshots[i], snapshots[i+1]],
+			shape: s1.getSeries().concat(s2.getSeries().slice(0).reverse())
+		})
+	}
+
+	// append the paths
+	var selection = g.selectAll("path.flowSignal").data(paths).enter().append("path")
+		.attr("class", "flowSignal")
+		.attr("d", function(d) { return d.pathGenerator(d.shape); })
+		.style("fill", function(d) { return d.color; })
+		.on("mouseenter", function(d)
+		{
+			putNodeOnTop(this);
+			d3.select(this)
+				.style("stroke", "#666666")
+				.style("stroke-width", 1.0)
+				.style("stroke-opacity", 0.7)
+				.style("fill-opacity", 1.0);
+		
+			// brush first snapshot
+			if (gridAnalysis.brushSelectionTimeout) 
+			{
+				clearTimeout(gridAnalysis.brushSelectionTimeout);
+				gridAnalysis.brushSelectionTimeout = undefined;
+			}
+			gridAnalysis.brushSelectionMembers(d.snapshots[0].brushedIDs.concat(d.snapshots[1].brushedIDs), d.ts[0]);
+
+		});
+
+	(function(pathSelection) {
+		pathSelection.on("mouseout", function() 
+		{
+			pathSelection.order();
+			d3.select(this)
+				.style("stroke", "")
+				.style("stroke-width", "")
+				.style("stroke-opacity", "")
+				.style("fill-opacity", "");
+			gridAnalysis.explore.brushDataPoints([]);
+		
+			gridAnalysis.brushSelectionTimeout = setTimeout(function() {
+				gridAnalysis.brushSelectionMembers([], undefined);
+				gridAnalysis.brushSelectionTimeout = undefined;
+			}, 75);
+			
+		});
+	})(selection);
+
 }
 
 SignalVis.prototype.brushSignal = function(_signal)
@@ -778,7 +871,7 @@ SignalVis.prototype.calcDiffSignal = function(otherTimeseries)
 	else
 	{
 		
-		var diff = A.clone().subtract(B);
+		var diff = B.clone().subtract(A);
 		var diffSeries = diff.getSeries();
 		
 		// build a new different
@@ -1161,25 +1254,20 @@ Explore.prototype.brushDataPoints = function(points)
 			updateSignals(explore.signalList, avg);
 		}
 	})(this, points, avgTimeseries);
+	return avgTimeseries;
+}
+
+Explore.prototype.showFlow = function(flow)
+{
+	var snapshots = flow.snapshots;
+
+	// show only on the last signal viewer
+	var start = this.signalList.length-1;
+	for (var i=start, N=this.signalList.length; i<N; i++) 
+	{
+		this.signalList[i].showSignalSnapshots(snapshots);
+	}
 }
 
 Explore.COLS = 1;
 Explore.ROWS = 2;
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
